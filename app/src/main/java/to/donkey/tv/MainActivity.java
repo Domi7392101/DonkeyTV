@@ -205,6 +205,19 @@ public class MainActivity extends Activity {
           + "var t=e.querySelector('.gradient')||e;t.click();return 'click';"
           + "}catch(e){return 'none';}})();";
 
+    /* Player page: bare, full-viewport, no chrome. */
+    private static final String PLAYER_JS =
+            "(function(){try{"
+          + "var s=document.createElement('style');"
+          + "s.textContent='html,body{background:#000 !important;"
+          + "overflow:hidden !important;margin:0 !important;"
+          + "height:100% !important;}"
+          + "::-webkit-scrollbar{width:0;height:0;}"
+          + "video{width:100vw !important;height:100vh !important;"
+          + "object-fit:contain !important;}';"
+          + "document.head.appendChild(s);"
+          + "}catch(e){}})();";
+
     private WebView webView;
     private FrameLayout root;
     private FrameLayout fullscreenHolder;
