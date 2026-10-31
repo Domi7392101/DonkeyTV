@@ -3,6 +3,7 @@ package to.donkey.tv;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -16,6 +17,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.PermissionRequest;
@@ -55,21 +57,74 @@ public class MainActivity extends Activity {
             "cloudflareinsights.com", "onclckds.com", "onclickalgo.com",
             "juicyads.com", "exoclick.com", "trafficjunky.net", "a-ads.com",
             "mgid.com", "zedo.com", "adnxs.com", "rubiconproject.com",
-            "pubmatic.com", "criteo.com", "taboola.com", "outbrain.com"
+            "pubmatic.com", "criteo.com", "taboola.com", "outbrain.com",
+            "chymiadolors.com", "doebirddrowner.com"
     };
 
+    /* ------------------------------------------------------------------
+     * TV LAYOUT CSS + focus tagging.
+     * Turns donkey.to's wrapping poster grids into horizontally scrolling
+     * rails, and makes the cards D-pad reachable. Re-runs on SPA route
+     * changes via a MutationObserver.
+     * ------------------------------------------------------------------ */
     private static final String INJECT_JS =
             "(function(){try{"
+          + "if(window.__donkeyInstalled){window.__donkeyTag();return;}"
+          + "window.__donkeyInstalled=true;"
           + "var s=document.createElement('style');"
-          + "s.textContent='*:focus{outline:4px solid #ff3b5c !important;outline-offset:3px;"
-          + "border-radius:12px;}html,body{background:#000 !important;}"
-          + "::-webkit-scrollbar{width:0;height:0;}';"
+          + "s.textContent="
+          + "'html,body{background:#000 !important;}"
+          + "'::-webkit-scrollbar{width:0;height:0;}"
+          + "'*:focus{outline:none !important;}"
+          + "'.donkey-focusable:focus,a:focus,button:focus,input:focus{"
+          + "outline:3px solid #fff !important;outline-offset:3px;"
+          + "border-radius:14px !important;transform:scale(1.07);"
+          + "transition:transform .12s ease-out;"
+          + "box-shadow:0 0 0 5px rgba(0,0,0,.65),0 10px 28px rgba(0,0,0,.8);}"
+          + "'ul.donkey-rail{display:flex !important;flex-wrap:nowrap !important;"
+          + "overflow-x:auto !important;overflow-y:hidden !important;"
+          + "gap:14px !important;padding:10px 48px 20px 48px !important;"
+          + "scroll-behavior:smooth;scroll-padding-inline:48px;}"
+          + "'ul.donkey-rail>li{flex:0 0 auto !important;width:190px !important;"
+          + "scroll-snap-align:start;}"
+          + "'ul.donkey-rail img{width:100% !important;height:auto !important;}"
+          + "'.albumDetail{display:none !important;}"
+          + "'.cardSet .gradient{overflow:hidden;border-radius:14px;}"
+          + "'.cardSet section b{white-space:nowrap;overflow:hidden;"
+          + "text-overflow:ellipsis;display:block;}"
+          + "'.homewrapper{padding-left:0 !important;padding-right:0 !important;}';"
           + "document.head.appendChild(s);"
-          + "document.querySelectorAll('[onclick]').forEach(function(e){"
-          + "if(!e.hasAttribute('tabindex'))e.setAttribute('tabindex','0');});"
-          + "document.addEventListener('focusin',function(e){try{e.target.scrollIntoView("
-          + "{block:'center',inline:'center',behavior:'smooth'});}catch(x){}},true);"
+          + "window.__donkeyTag=function(){"
+          + "document.querySelectorAll('li.cardSet').forEach(function(li){"
+          + "li.setAttribute('tabindex','0');"
+          + "li.classList.add('donkey-focusable');"
+          + "var ul=li.parentElement;"
+          + "if(ul&&ul.tagName==='UL')ul.classList.add('donkey-rail');});"
+          + "document.querySelectorAll('a,button,input').forEach(function(e){"
+          + "if(!e.hasAttribute('tabindex'))e.setAttribute('tabindex','0');});};"
+          + "window.__donkeyTag();"
+          + "document.addEventListener('focusin',function(e){try{"
+          + "e.target.scrollIntoView({block:'nearest',inline:'center'});"
+          + "}catch(x){}},true);"
+          + "var t=null;new MutationObserver(function(){"
+          + "clearTimeout(t);t=setTimeout(window.__donkeyTag,250);"
+          + "}).observe(document.body,{childList:true,subtree:true});"
           + "}catch(e){}})();";
+
+    /* Focus the player iframe so key events reach it. */
+    private static final String JS_FOCUS_PLAYER =
+            "(function(){try{var f=document.querySelector('iframe');"
+          + "if(!f)return 'no';f.focus();"
+          + "try{f.contentWindow.focus();}catch(e){}return 'ok';"
+          + "}catch(e){return 'no';}})();";
+
+    /* Activate whatever is focused. Cards put their handler on .gradient. */
+    private static final String JS_ACTIVATE =
+            "(function(){try{var e=document.activeElement;"
+          + "if(!e||e===document.body)return 'none';"
+          + "if(e.tagName==='INPUT'||e.tagName==='TEXTAREA'){e.focus();return 'input';}"
+          + "var t=e.querySelector('.gradient')||e;t.click();return 'click';"
+          + "}catch(e){return 'none';}})();";
 
     private WebView webView;
     private FrameLayout root;
@@ -247,10 +302,60 @@ public class MainActivity extends Activity {
         return true;
     }
 
+    /* ------------------------------------------------------------------
+     * Media / transport keys. Routes into the player iframe by focusing it
+     * and forwarding a Space (toggle) or arrow (seek) key.
+     * ------------------------------------------------------------------ */
+    private boolean isMediaKey(int code) {
+        return code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            || code == KeyEvent.KEYCODE_MEDIA_PAUSE
+            || code == KeyEvent.KEYCODE_MEDIA_PLAY
+            || code == KeyEvent.KEYCODE_MEDIA_STOP
+            || code == KeyEvent.KEYCODE_HEADSETHOOK
+            || code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+            || code == KeyEvent.KEYCODE_MEDIA_REWIND;
+    }
+
+    private boolean handleMediaKey(int code, int action) {
+        if (action != KeyEvent.ACTION_DOWN) return true;
+        if (cursorMode) setCursorMode(false);
+
+        if (code == KeyEvent.KEYCODE_MEDIA_STOP) {
+            if (fullscreenHolder.getVisibility() == View.VISIBLE) exitFullscreen();
+            else if (webView.canGoBack()) webView.goBack();
+            return true;
+        }
+
+        webView.evaluateJavascript(JS_FOCUS_PLAYER, result -> {
+            boolean focused = result != null && result.contains("ok");
+            if (!focused) {
+                // No iframe on this page - fall back to a centre tap.
+                tapAt(getResources().getDisplayMetrics().widthPixels / 2f,
+                      getResources().getDisplayMetrics().heightPixels / 2f);
+                return;
+            }
+            int forward = code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+                    ? KeyEvent.KEYCODE_DPAD_RIGHT
+                    : code == KeyEvent.KEYCODE_MEDIA_REWIND
+                    ? KeyEvent.KEYCODE_DPAD_LEFT
+                    : KeyEvent.KEYCODE_SPACE;
+            sendKey(forward);
+        });
+        return true;
+    }
+
+    private void sendKey(int keyCode) {
+        long now = SystemClock.uptimeMillis();
+        webView.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0));
+        webView.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0));
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         final int code = event.getKeyCode();
         final int action = event.getAction();
+
+        if (isMediaKey(code)) return handleMediaKey(code, action);
 
         if (code == KeyEvent.KEYCODE_BACK) {
             if (action == KeyEvent.ACTION_UP) return true;
@@ -285,13 +390,14 @@ public class MainActivity extends Activity {
                     longPressFired = false;
                     handler.postDelayed(longPressRunnable, 650);
                 }
-                return super.dispatchKeyEvent(event);
+                return true;
             }
             boolean fired = longPressFired;
             longPressFired = false;
             handler.removeCallbacks(longPressRunnable);
             if (fired) return true;
-            return super.dispatchKeyEvent(event);
+            activateFocused();
+            return true;
         }
 
         if (cursorMode) {
@@ -308,6 +414,16 @@ public class MainActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
+    private void activateFocused() {
+        webView.evaluateJavascript(JS_ACTIVATE, result -> {
+            if (result != null && result.contains("input")) {
+                InputMethodManager imm =
+                        (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+    }
+
     private void moveCursor(int dx, int dy) {
         float maxX = getResources().getDisplayMetrics().widthPixels - 4;
         float maxY = getResources().getDisplayMetrics().heightPixels - 4;
@@ -317,14 +433,16 @@ public class MainActivity extends Activity {
         cursor.setY(cursorY - cursor.getHeight() / 2f);
     }
 
-    private void tapAtCursor() {
+    private void tapAtCursor() { tapAt(cursorX, cursorY); }
+
+    private void tapAt(float x, float y) {
         long now = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, cursorX, cursorY, 0);
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
         webView.dispatchTouchEvent(down);
         down.recycle();
         handler.postDelayed(() -> {
             long t = SystemClock.uptimeMillis();
-            MotionEvent up = MotionEvent.obtain(t - 50, t, MotionEvent.ACTION_UP, cursorX, cursorY, 0);
+            MotionEvent up = MotionEvent.obtain(t - 50, t, MotionEvent.ACTION_UP, x, y, 0);
             webView.dispatchTouchEvent(up);
             up.recycle();
         }, 60);
