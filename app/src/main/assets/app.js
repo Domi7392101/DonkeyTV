@@ -47,6 +47,51 @@ function row(title, items) {
   view.appendChild(s);
 }
 
+function playMedia(type, id, s, e, meta) {
+  const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
+                profile: 'default', ts: Date.now() };
+  try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
+  Native.play(type, id, s, e);
+}
+
+function recentCard(r) {
+  const el = document.createElement('div');
+  el.className = 'card f'; el.tabIndex = 0;
+  el.innerHTML = `<div class="ph"><img loading="lazy" src="${poster(r.poster)}"></div>
+    <b>${r.title}</b><small>${r.type === 'tv' ? 'S' + r.s + 'E' + r.e : 'Movie'}</small>`;
+  el.onclick = () => playMedia(r.type, r.id, r.s, r.e,
+    { title: r.title, poster: r.poster });
+  return el;
+}
+
+function recents(limit) {
+  let list = [];
+  try { list = JSON.parse(Native.getRecent() || '[]'); } catch (e) {}
+  list = list.filter(r => r.profile === 'default');
+  return limit ? list.slice(0, limit) : list;
+}
+
+function recentPage() {
+  const list = recents(0);
+  const bar = document.createElement('div');
+  bar.style.cssText = 'padding:20px 52px 0';
+  bar.innerHTML = '<h1 style="font-size:26px;margin-bottom:16px">Recently Watched</h1>';
+  const g = document.createElement('div');
+  g.className = 'grid';
+  list.forEach(r => g.appendChild(recentCard(r)));
+  const clr = document.createElement('button');
+  clr.className = 'btn ghost f'; clr.tabIndex = 0;
+  clr.textContent = 'Clear all';
+  clr.style.marginTop = '16px';
+  clr.onclick = () => { Native.clearRecent(); render('recent'); };
+  view.appendChild(bar);
+  if (!list.length) {
+    const p = document.createElement('div');
+    p.className = 'load'; p.textContent = 'Nothing watched yet.';
+    view.appendChild(p);
+  } else { view.appendChild(g); view.appendChild(clr); }
+}
+
 function render(route, param) {
   view.innerHTML = '';
   if (!Native.getKey()) return setup();
