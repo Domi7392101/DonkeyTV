@@ -57,7 +57,17 @@ public class MainActivity extends Activity {
           + "object-fit:contain !important;}';document.head.appendChild(s);"
           + "}catch(e){}})();";
 
-    private static final String FOCUS_PLAYER =
+    private static final String private static final String TOGGLE_PLAY =
+        "(function(){try{"
+      + "var d=document;"
+      + "var v=d.querySelector('video')||(d.querySelector('iframe')&&null);"
+      + "if(!v){var fs=d.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){"
+      + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"
+      + "if(!v){for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage('toggle','*');}catch(e){}}}"
+      + "if(!v)return 'no';"
+      + "if(v.paused){v.play();}else{v.pause();}"
+      + "return 'ok';"
+      + "}catch(e){return 'no';}})();"; =
             "(function(){try{var f=document.querySelector('iframe');if(!f)return 'no';"
           + "f.focus();try{f.contentWindow.focus();}catch(e){}return 'ok';"
           + "}catch(e){return 'no';}})();";
@@ -244,23 +254,20 @@ public class MainActivity extends Activity {
     }
 
     private void mediaKey(int code) {
-        if (code == KeyEvent.KEYCODE_MEDIA_STOP) {
-            if (playerMode) { playerMode = false; web.loadUrl(UI_URL); }
-            return;
-        }
-        if (!playerMode) return;
-        web.evaluateJavascript(FOCUS_PLAYER, r -> {
-            if (r == null || !r.contains("ok")) return;
-            int k = code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
-                    ? KeyEvent.KEYCODE_DPAD_RIGHT
-                    : code == KeyEvent.KEYCODE_MEDIA_REWIND
-                    ? KeyEvent.KEYCODE_DPAD_LEFT
-                    : KeyEvent.KEYCODE_SPACE;
-            long now = SystemClock.uptimeMillis();
-            web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, k, 0));
-            web.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, k, 0));
-        });
+    if (code == KeyEvent.KEYCODE_MEDIA_STOP) {
+        if (playerMode) { playerMode = false; web.loadUrl(UI_URL); }
+        return;
     }
+    if (!playerMode) return;
+    if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+     || code == KeyEvent.KEYCODE_MEDIA_REWIND) {
+        int dir = code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ? 10 : -10;
+        web.evaluateJavascript("(function(){var v=document.querySelector('video');"
+            + "if(!v)return;v.currentTime=Math.max(0,v.currentTime+" + dir + ");})()", null);
+        return;
+    }
+    web.evaluateJavascript(TOGGLE_PLAY, null);
+}
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
