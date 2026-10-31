@@ -70,9 +70,6 @@ public class MainActivity extends Activity {
           + "if(v.paused){v.play();}else{v.pause();}"
           + "return 'ok';"
           + "}catch(e){return 'no';}})();";
-            "(function(){try{var f=document.querySelector('iframe');if(!f)return 'no';"
-          + "f.focus();try{f.contentWindow.focus();}catch(e){}return 'ok';"
-          + "}catch(e){return 'no';}})();";
 
     private WebView web;
     private FrameLayout fullscreenHolder;
