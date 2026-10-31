@@ -59,17 +59,17 @@ public class MainActivity extends Activity {
           + "object-fit:contain !important;}';document.head.appendChild(s);"
           + "}catch(e){}})();";
 
-    private static final String private static final String TOGGLE_PLAY =
-        "(function(){try{"
-      + "var d=document;"
-      + "var v=d.querySelector('video')||(d.querySelector('iframe')&&null);"
-      + "if(!v){var fs=d.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){"
-      + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"
-      + "if(!v){for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage('toggle','*');}catch(e){}}}"
-      + "if(!v)return 'no';"
-      + "if(v.paused){v.play();}else{v.pause();}"
-      + "return 'ok';"
-      + "}catch(e){return 'no';}})();"; =
+    private static final String TOGGLE_PLAY =
+            "(function(){try{"
+          + "var d=document;"
+          + "var v=d.querySelector('video');"
+          + "if(!v){var fs=d.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){"
+          + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"
+          + "if(!v){for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage('toggle','*');}catch(e){}}}"
+          + "if(!v)return 'no';"
+          + "if(v.paused){v.play();}else{v.pause();}"
+          + "return 'ok';"
+          + "}catch(e){return 'no';}})();";
             "(function(){try{var f=document.querySelector('iframe');if(!f)return 'no';"
           + "f.focus();try{f.contentWindow.focus();}catch(e){}return 'ok';"
           + "}catch(e){return 'no';}})();";
