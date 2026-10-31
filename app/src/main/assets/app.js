@@ -186,10 +186,10 @@ function detail(param) {
   h.querySelector('.btn').onclick = () => playMedia(type, id, 1, 1,
     { title, poster: d.poster_path });
   view.appendChild(h);
-  if (type === 'tv') seasons(id, d.seasons || []);
+  if (type === 'tv') seasons(id, d.seasons || [], title, d.poster_path);
 }
 
-function seasons(id, list) {
+function seasons(id, list, title, poster) {
   const bar = document.createElement('div');
   bar.className = 'seasons';
   const eps = document.createElement('div');
@@ -201,16 +201,16 @@ function seasons(id, list) {
     c.onclick = () => {
       bar.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
-      loadEps(id, s.season_number, eps);
+      loadEps(id, s.season_number, eps, title, poster);
     };
     bar.appendChild(c);
   });
   view.appendChild(bar); view.appendChild(eps);
   const first = list.find(s => s.season_number > 0);
-  if (first) loadEps(id, first.season_number, eps);
+  if (first) loadEps(id, first.season_number, eps, title, poster);
 }
 
-function loadEps(id, season, box) {
+function loadEps(id, season, box, title, poster) {
   box.innerHTML = '';
   (api('tv/' + id + '/season/' + season).episodes || []).forEach(e => {
     const d = document.createElement('div');
@@ -218,8 +218,7 @@ function loadEps(id, season, box) {
     d.innerHTML = `<span class="num">S${season}E${e.episode_number}</span>
       <b>${e.name || 'Episode ' + e.episode_number}</b>
       <small>${e.air_date || ''}</small>`;
-    d.onclick = () => playMedia('tv', id, season, e.episode_number,
-      { title: 'Show ' + id, poster: '' });
+    d.onclick = () => playMedia('tv', id, season, e.episode_number, { title, poster });
     box.appendChild(d);
   });
 }
