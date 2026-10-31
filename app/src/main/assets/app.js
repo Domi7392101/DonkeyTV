@@ -188,6 +188,12 @@ render('home');
 function moveFocus(dir) {
   const all = [...document.querySelectorAll('.f, .btn, #nav a, input')]
     .filter(e => e.offsetParent !== null);
+  if (cur && cur.tagName === 'INPUT' && (dir === 'left' || dir === 'right')) {
+  const p = cur.selectionStart;
+  const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
+  cur.setSelectionRange(n, n);
+  return;
+}
   const cur = document.activeElement;
   if (!cur || !all.includes(cur)) { all[0] && all[0].focus(); return; }
   // same-row first
