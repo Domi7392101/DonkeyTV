@@ -184,3 +184,29 @@ function setup() {
 document.querySelectorAll('#nav a').forEach(a =>
   a.onclick = () => go(a.dataset.go));
 render('home');
+
+function moveFocus(dir) {
+  const all = [...document.querySelectorAll('.f, .btn, #nav a, input')]
+    .filter(e => e.offsetParent !== null);
+  const cur = document.activeElement;
+  if (!cur || !all.includes(cur)) { all[0] && all[0].focus(); return; }
+  // same-row first
+  const r = cur.getBoundingClientRect();
+  let best = null, bestD = 1e9;
+  for (const e of all) {
+    if (e === cur) continue;
+    const q = e.getBoundingClientRect();
+    const dx = q.left - r.left, dy = q.top - r.top;
+    let score;
+    if (dir === 'left'  && dx < -8) score = Math.abs(dx) + Math.abs(dy) * 3;
+    if (dir === 'right' && dx >  8) score = Math.abs(dx) + Math.abs(dy) * 3;
+    if (dir === 'up'    && dy < -8) score = Math.abs(dy) + Math.abs(dx) * 3;
+    if (dir === 'down'  && dy >  8) score = Math.abs(dy) + Math.abs(dx) * 3;
+    if (score !== undefined && score < bestD) { bestD = score; best = e; }
+  }
+  if (best) {
+    best.focus();
+    best.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+}
+window.dkMove = moveFocus;
