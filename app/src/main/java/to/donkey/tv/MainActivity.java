@@ -270,30 +270,49 @@ public class MainActivity extends Activity {
 }
 
     @Override
-    public boolean dispatchKeyEvent(KeyEvent e) {
-        int c = e.getKeyCode();
-        if (isMediaKey(c)) {
-            if (e.getAction() == KeyEvent.ACTION_DOWN) mediaKey(c);
-            return true;
-        }
-        if (c == KeyEvent.KEYCODE_BACK) {
-            if (e.getAction() == KeyEvent.ACTION_UP) return true;
-            if (playerMode) { playerMode = false; web.loadUrl(UI_URL); return true; }
-            if (backArmed) { finish(); return true; }
-            web.evaluateJavascript(
-                "(function(){return window.dkBack?dkBack():false;})()", r -> {
-                    if (r == null || r.contains("false")) {
-                        backArmed = true;
-                        handler.postDelayed(() -> backArmed = false, 2500);
-                        Toast.makeText(this, "Press BACK again to exit",
-                                Toast.LENGTH_SHORT).show();
-                    }
-                });
-            return true;
-        }
-        return super.dispatchKeyEvent(e);
+    @Override
+public boolean dispatchKeyEvent(KeyEvent e) {
+    int c = e.getKeyCode();
+
+    if (isMediaKey(c)) {
+        if (e.getAction() == KeyEvent.ACTION_DOWN) mediaKey(c);
+        return true;
     }
 
+    /* --- NEW: D-pad moves focus one card at a time --- */
+    if (c == KeyEvent.KEYCODE_DPAD_LEFT  || c == KeyEvent.KEYCODE_DPAD_RIGHT
+     || c == KeyEvent.KEYCODE_DPAD_UP    || c == KeyEvent.KEYCODE_DPAD_DOWN) {
+        if (!playerMode) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                String d = c == KeyEvent.KEYCODE_DPAD_LEFT  ? "left"
+                         : c == KeyEvent.KEYCODE_DPAD_RIGHT ? "right"
+                         : c == KeyEvent.KEYCODE_DPAD_UP    ? "up" : "down";
+                web.evaluateJavascript("dkMove('" + d + "')", null);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(e);   // let the player handle arrows
+    }
+    /* --- end new block --- */
+
+    if (c == KeyEvent.KEYCODE_BACK) {
+        if (e.getAction() == KeyEvent.ACTION_UP) return true;
+        if (playerMode) { playerMode = false; web.loadUrl(UI_URL); return true; }
+        if (backArmed) { finish(); return true; }
+        web.evaluateJavascript(
+            "(function(){return window.dkBack?dkBack():false;})()", r -> {
+                if (r == null || r.contains("false")) {
+                    backArmed = true;
+                    handler.postDelayed(() -> backArmed = false, 2500);
+                    Toast.makeText(this, "Press BACK again to exit",
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        return true;
+    }
+
+    return super.dispatchKeyEvent(e);
+}
     private void hideSystemUi() {
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
