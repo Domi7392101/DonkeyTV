@@ -292,7 +292,6 @@ public class MainActivity extends Activity {
 }
 
     @Override
-    @Override
 public boolean dispatchKeyEvent(KeyEvent e) {
     int c = e.getKeyCode();
 
