@@ -330,7 +330,12 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 progress.setVisibility(View.GONE);
-                v.evaluateJavascript(INJECT_JS, null);
+                if (url != null && url.contains("vidstuck.cc")) {
+                    v.evaluateJavascript(PLAYER_JS, null);
+                    hideSystemUi();
+                } else {
+                    v.evaluateJavascript(INJECT_JS, null);
+                }
             }
 
             @Override
