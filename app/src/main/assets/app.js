@@ -3,6 +3,37 @@ const stack = [];
 let root = 'home';
 const view = document.getElementById('view');
 
+function moveFocus(dir) {
+  const all = [...document.querySelectorAll('.f, .btn, #nav a, input')]
+    .filter(e => e.offsetParent !== null);
+  const cur = document.activeElement;
+  if (!cur || !all.includes(cur)) { all[0] && all[0].focus(); return; }
+  if (cur.tagName === 'INPUT' && (dir === 'left' || dir === 'right')) {
+    const p = cur.selectionStart;
+    const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
+    cur.setSelectionRange(n, n);
+    return;
+  }
+  const r = cur.getBoundingClientRect();
+  let best = null, bestD = 1e9;
+  for (const e of all) {
+    if (e === cur) continue;
+    const q = e.getBoundingClientRect();
+    const dx = q.left - r.left, dy = q.top - r.top;
+    let score;
+    if (dir === 'left'  && dx < -8) score = Math.abs(dx) + Math.abs(dy) * 3;
+    if (dir === 'right' && dx >  8) score = Math.abs(dx) + Math.abs(dy) * 3;
+    if (dir === 'up'    && dy < -8) score = Math.abs(dy) + Math.abs(dx) * 3;
+    if (dir === 'down'  && dy >  8) score = Math.abs(dy) + Math.abs(dx) * 3;
+    if (score !== undefined && score < bestD) { bestD = score; best = e; }
+  }
+  if (best) {
+    best.focus();
+    best.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+}
+window.dkMove = moveFocus;
+
 function api(path) {
   try { return JSON.parse(Native.get(path)); } catch (e) { return {}; }
 }
@@ -231,47 +262,21 @@ function setup() {
     It is stored on this device only.</p>
     <input id="k" placeholder="TMDB API key">
     <button class="btn f" tabindex="0">Save</button>`;
-  d.querySelector('.btn').onclick = () => {
-    const v = d.querySelector('#k').value.trim();
+  const input = d.querySelector('#k');
+  const save = () => {
+    const v = input.value.trim();
     if (!v) return;
-    Native.setKey(v); render('home');
+    Native.setKey(v);
+    render('home');
   };
+  d.querySelector('.btn').onclick = save;
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); save(); }
+  });
   view.appendChild(d);
-  setTimeout(() => d.querySelector('#k').focus(), 80);
+  setTimeout(() => input.focus(), 80);
 }
 
 document.querySelectorAll('#nav a').forEach(a =>
   a.onclick = () => go(a.dataset.go));
 render('home');
-
-function moveFocus(dir) {
-  const all = [...document.querySelectorAll('.f, .btn, #nav a, input')]
-    .filter(e => e.offsetParent !== null);
-  if (cur && cur.tagName === 'INPUT' && (dir === 'left' || dir === 'right')) {
-  const p = cur.selectionStart;
-  const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
-  cur.setSelectionRange(n, n);
-  return;
-}
-  const cur = document.activeElement;
-  if (!cur || !all.includes(cur)) { all[0] && all[0].focus(); return; }
-  // same-row first
-  const r = cur.getBoundingClientRect();
-  let best = null, bestD = 1e9;
-  for (const e of all) {
-    if (e === cur) continue;
-    const q = e.getBoundingClientRect();
-    const dx = q.left - r.left, dy = q.top - r.top;
-    let score;
-    if (dir === 'left'  && dx < -8) score = Math.abs(dx) + Math.abs(dy) * 3;
-    if (dir === 'right' && dx >  8) score = Math.abs(dx) + Math.abs(dy) * 3;
-    if (dir === 'up'    && dy < -8) score = Math.abs(dy) + Math.abs(dx) * 3;
-    if (dir === 'down'  && dy >  8) score = Math.abs(dy) + Math.abs(dx) * 3;
-    if (score !== undefined && score < bestD) { bestD = score; best = e; }
-  }
-  if (best) {
-    best.focus();
-    best.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-  }
-}
-window.dkMove = moveFocus;
