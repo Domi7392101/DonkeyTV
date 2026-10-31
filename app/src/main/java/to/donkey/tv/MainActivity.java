@@ -238,6 +238,29 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        private SharedPreferences prefs() { return getSharedPreferences(PREFS, MODE_PRIVATE); }
+
+        @JavascriptInterface
+        public String getRecent() { return prefs().getString("recent", "[]"); }
+
+        @JavascriptInterface
+        public void addRecent(String json) {
+            try {
+                JSONArray a = new JSONArray(prefs().getString("recent", "[]"));
+                JSONObject n = new JSONObject(json);
+                String key = n.getString("type") + ":" + n.optString("id");
+                JSONArray out = new JSONArray();
+                out.put(n);
+                for (int i = 0; i < a.length() && out.length() < 50; i++) {
+                    JSONObject o = a.getJSONObject(i);
+                    if (!(o.getString("type") + ":" + o.optString("id")).equals(key)) out.put(o);
+                }
+                prefs().edit().putString("recent", out.toString()).apply();
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
+        public void clearRecent() { prefs().edit().remove("recent").apply(); }
         public void quit() {
             runOnUiThread(MainActivity.this::finish);
         }
