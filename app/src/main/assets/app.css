@@ -1,0 +1,75 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif}
+body{padding-top:72px}
+::-webkit-scrollbar{width:0;height:0}
+a{text-decoration:none;color:inherit}
+:focus{outline:none}
+.f:focus,.btn:focus,.card:focus{
+  outline:3px solid #fff;outline-offset:3px;border-radius:14px;
+  transform:scale(1.07);transition:transform .12s;z-index:5;position:relative;
+  box-shadow:0 0 0 5px rgba(0,0,0,.7),0 12px 30px rgba(0,0,0,.85)}
+#nav{position:fixed;top:0;left:0;right:0;height:72px;z-index:100;
+  display:flex;align-items:center;gap:30px;padding:0 52px;
+  background:linear-gradient(180deg,#000 0%,#000 45%,rgba(0,0,0,0) 100%)}
+.logo{color:#e50914;font-weight:900;font-size:22px;letter-spacing:.2em}
+#nav a{color:#b3b3b3;font-size:15px;font-weight:500;padding:6px 10px;border-radius:8px}
+#nav a:focus,#nav a.on{color:#fff;font-weight:800}
+.hero{position:relative;height:76vh;min-height:440px;display:flex;
+  align-items:flex-end;padding:0 52px 64px;overflow:hidden}
+.hero img.bg{position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;object-position:center 30%}
+.hero .scrim{position:absolute;inset:0;background:
+  linear-gradient(90deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.4) 55%,transparent 100%),
+  linear-gradient(0deg,#000 0%,rgba(0,0,0,0) 45%)}
+.hero .in{position:relative;z-index:2;max-width:620px}
+.hero h1{font-size:46px;line-height:1.05;margin-bottom:12px}
+.meta{display:flex;gap:14px;color:#bbb;font-size:14px;margin-bottom:14px;
+  flex-wrap:wrap}
+.score{color:#f5c518;font-weight:700}
+.desc{color:#ccc;font-size:15px;line-height:1.5;margin-bottom:22px;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden}
+.row{margin:34px 0}
+.row h2{font-size:15px;text-transform:uppercase;letter-spacing:.13em;
+  color:#e5e5e5;padding-left:52px;margin-bottom:12px}
+.track{display:flex;gap:14px;overflow-x:auto;padding:10px 52px 22px;
+  scroll-padding-inline:52px;scroll-behavior:smooth}
+.card{flex:0 0 auto;width:206px;cursor:pointer;border-radius:14px}
+.card .ph{width:100%;aspect-ratio:2/3;background:#1c1c1c;border-radius:14px;
+  overflow:hidden}
+.card img{width:100%;height:100%;object-fit:cover;display:block}
+.card b{display:block;font-size:13px;margin-top:8px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card small{color:#888;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+  gap:20px;padding:20px 52px 60px}
+.btn{display:inline-flex;align-items:center;gap:10px;background:#fff;
+  color:#000;font-weight:700;font-size:16px;padding:13px 30px;
+  border-radius:8px;border:0;cursor:pointer}
+.btn.ghost{background:rgba(109,109,110,.7);color:#fff}
+.hd{display:flex;gap:34px;padding:40px 52px}
+.hd .ph{flex:0 0 280px;aspect-ratio:2/3;background:#1c1c1c;
+  border-radius:14px;overflow:hidden}
+.hd .ph img{width:100%;height:100%;object-fit:cover}
+.hd h1{font-size:40px;margin-bottom:12px}
+.seasons{display:flex;gap:10px;padding:0 52px;margin-bottom:8px}
+.chip{padding:9px 20px;border-radius:8px;background:#1f1f1f;color:#bbb;
+  font-size:14px;cursor:pointer}
+.chip.on{background:#e50914;color:#fff;font-weight:700}
+.eps{display:flex;gap:14px;overflow-x:auto;padding:12px 52px 50px}
+.ep{flex:0 0 auto;width:236px;background:#181818;border-radius:10px;
+  padding:14px;cursor:pointer}
+.ep b{display:block;font-size:14px;margin-bottom:6px}
+.ep small{color:#8a8a8a;font-size:12px}
+.ep .num{color:#e50914;font-weight:800;font-size:12px;margin-bottom:6px;
+  display:block}
+input#q{width:calc(100% - 104px);margin:6px 52px 0;padding:16px 20px;
+  font-size:18px;background:#1c1c1c;color:#fff;border:2px solid #333;
+  border-radius:10px}
+input#q:focus{border-color:#fff}
+.load{padding:120px 52px;color:#888;font-size:17px}
+#setup{padding:120px 52px;max-width:720px}
+#setup h1{font-size:32px;margin-bottom:14px}
+#setup p{color:#aaa;line-height:1.6;margin-bottom:22px}
+#setup input{width:100%;padding:16px;font-size:16px;background:#1c1c1c;
+  color:#fff;border:2px solid #333;border-radius:10px;margin-bottom:18px}
