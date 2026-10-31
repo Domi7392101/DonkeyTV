@@ -2,35 +2,99 @@ const IMG = 'https://image.tmdb.org/t/p/';
 const stack = [];
 let root = 'home';
 const view = document.getElementById('view');
+const SEL = '.f, .btn, #nav a, input';
+let lock = 0;
 
-function moveFocus(dir) {
-  const all = [...document.querySelectorAll('.f, .btn, #nav a, input')]
-    .filter(e => e.offsetParent !== null);
-  const cur = document.activeElement;
-  if (!cur || !all.includes(cur)) { all[0] && all[0].focus(); return; }
-  if (cur.tagName === 'INPUT' && (dir === 'left' || dir === 'right')) {
-    const p = cur.selectionStart;
-    const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
-    cur.setSelectionRange(n, n);
+const vis = e => e.offsetParent !== null && !e.disabled;
+const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zone : ''; };
+const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
+
+/* scroll ONLY the horizontal strip when there is one */
+function scrollTo(el) {
+  const strip = el.closest('.track, .eps, .seasons');
+  if (strip && strip.scrollWidth > strip.clientWidth + 4) {
+    const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 70;
+    if (r.left < b.left + pad) strip.scrollLeft -= (b.left + pad - r.left);
+    else if (r.right > b.right - pad) strip.scrollLeft += (r.right - b.right + pad);
     return;
   }
+  const r = el.getBoundingClientRect();
+  if (r.top < 96) window.scrollBy(0, r.top - 112);
+  else if (r.bottom > innerHeight - 70) window.scrollBy(0, r.bottom - innerHeight + 90);
+}
+
+function focusEl(el) { if (!el) return; el.focus({ preventScroll: true }); scrollTo(el); }
+
+function moveFocus(dir) {
+  const t = Date.now();
+  if (t - lock < 55) return;
+  lock = t;
+
+  const all = pool();
+  const cur = document.activeElement;
+  if (!cur || !all.includes(cur)) return focusEl(all[0]);
+
+  if (cur.tagName === 'INPUT') {
+    if (dir === 'left' || dir === 'right') {
+      const p = cur.selectionStart;
+      const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
+      cur.setSelectionRange(n, n);
+      return;
+    }
+    if (dir === 'up') return;
+  }
+
+  const z = zone(cur);
+  let cands = all.filter(e => e !== cur);
+
+  /* stay inside the row you are on */
+  if ((z === 'eps' || z === 'seasons') && (dir === 'left' || dir === 'right')) {
+    cands = cands.filter(e => zone(e) === z);
+  }
+
+  /* episode row -> the selected season chip, never a random one */
+  if (z === 'eps' && dir === 'up') {
+    const chips = [...document.querySelectorAll('.chip')];
+    return focusEl(chips.find(c => c.classList.contains('on')) || chips[0]);
+  }
+
+  /* season row -> the Play button above it */
+  if (z === 'seasons' && dir === 'up') {
+    return focusEl(document.querySelector('.hd .btn') || document.querySelector('.btn'));
+  }
+
+  /* season row -> drop into that season's episodes */
+  if (z === 'seasons' && dir === 'down') {
+    const chip = cur.classList.contains('chip') ? cur : document.querySelector('.chip.on');
+    if (!chip) return;
+    chip.click();
+    setTimeout(() => focusEl(document.querySelector('.eps .ep')), 40);
+    return;
+  }
+
+  /* episode row -> next section, or nothing */
+  if (z === 'eps' && dir === 'down') {
+    const r = cur.getBoundingClientRect();
+    const below = cands.filter(e => {
+      const q = e.getBoundingClientRect();
+      return q.top > r.bottom + 8 && zone(e) !== 'eps';
+    });
+    return focusEl(below[0]);
+  }
+
   const r = cur.getBoundingClientRect();
   let best = null, bestD = 1e9;
-  for (const e of all) {
-    if (e === cur) continue;
+  for (const e of cands) {
     const q = e.getBoundingClientRect();
     const dx = q.left - r.left, dy = q.top - r.top;
     let score;
-    if (dir === 'left'  && dx < -8) score = Math.abs(dx) + Math.abs(dy) * 3;
-    if (dir === 'right' && dx >  8) score = Math.abs(dx) + Math.abs(dy) * 3;
-    if (dir === 'up'    && dy < -8) score = Math.abs(dy) + Math.abs(dx) * 3;
-    if (dir === 'down'  && dy >  8) score = Math.abs(dy) + Math.abs(dx) * 3;
+    if (dir === 'left'  && dx < -8) score = -dx + Math.abs(dy) * 3;
+    if (dir === 'right' && dx >  8) score =  dx + Math.abs(dy) * 3;
+    if (dir === 'up'    && dy < -8) score = -dy + Math.abs(dx) * 3;
+    if (dir === 'down'  && dy >  8) score =  dy + Math.abs(dx) * 3;
     if (score !== undefined && score < bestD) { bestD = score; best = e; }
   }
-  if (best) {
-    best.focus();
-    best.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-  }
+  focusEl(best);
 }
 window.dkMove = moveFocus;
 
@@ -114,7 +178,7 @@ function recentPage() {
   clr.className = 'btn ghost f'; clr.tabIndex = 0;
   clr.textContent = 'Clear all';
   clr.style.marginTop = '16px';
-  clr.onclick = () => { Native.clearRecent(); ('recent'); };
+  clr.onclick = () => { Native.clearRecent(); render('recent'); };
   view.appendChild(bar);
   if (!list.length) {
     const p = document.createElement('div');
@@ -170,6 +234,7 @@ function home() {
   row('Movies', (api('trending/movie/day').results || []));
   row('TV Shows', (api('trending/tv/day').results || []));
   row('Top Rated', (api('movie/top_rated').results || []));
+  setTimeout(() => focusEl(view.querySelector('.f')), 40);
 }
 
 function grid(kind) {
@@ -178,6 +243,7 @@ function grid(kind) {
   g.className = 'grid';
   (d.results || []).forEach(m => g.appendChild(card(m)));
   view.appendChild(g);
+  setTimeout(() => focusEl(g.querySelector('.f')), 40);
 }
 
 function search() {
@@ -218,13 +284,16 @@ function detail(param) {
     { title, poster: d.poster_path });
   view.appendChild(h);
   if (type === 'tv') seasons(id, d.seasons || [], title, d.poster_path);
+  setTimeout(() => focusEl(h.querySelector('.btn')), 40);
 }
 
 function seasons(id, list, title, poster) {
   const bar = document.createElement('div');
   bar.className = 'seasons';
+  bar.dataset.zone = 'seasons';
   const eps = document.createElement('div');
   eps.className = 'eps';
+  eps.dataset.zone = 'eps';
   list.filter(s => s.season_number > 0).forEach((s, i) => {
     const c = document.createElement('div');
     c.className = 'chip f'; c.tabIndex = 0; c.textContent = 'S' + s.season_number;
@@ -243,6 +312,7 @@ function seasons(id, list, title, poster) {
 
 function loadEps(id, season, box, title, poster) {
   box.innerHTML = '';
+  box.scrollLeft = 0;
   (api('tv/' + id + '/season/' + season).episodes || []).forEach(e => {
     const d = document.createElement('div');
     d.className = 'ep f'; d.tabIndex = 0;
