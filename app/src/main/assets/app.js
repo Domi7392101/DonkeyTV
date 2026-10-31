@@ -83,7 +83,7 @@ function recentPage() {
   clr.className = 'btn ghost f'; clr.tabIndex = 0;
   clr.textContent = 'Clear all';
   clr.style.marginTop = '16px';
-  clr.onclick = () => { Native.clearRecent(); render('recent'); };
+  clr.onclick = () => { Native.clearRecent(); ('recent'); };
   view.appendChild(bar);
   if (!list.length) {
     const p = document.createElement('div');
@@ -100,6 +100,7 @@ function render(route, param) {
   if (route === 'tv') return grid('tv');
   if (route === 'search') return search();
   if (route === 'detail') return detail(param);
+  if (route === 'recent') return recentPage();
 }
 
 function hero(m) {
@@ -114,7 +115,8 @@ function hero(m) {
     <p class="desc">${m.overview || ''}</p>
     <button class="btn f" tabindex="0">▶ Play</button></div>`;
   el.querySelector('.btn').onclick = () =>
-    Native.play(m.media_type === 'tv' || m.first_air_date ? 'tv' : 'movie', m.id, 1, 1);
+    playMedia(m.media_type === 'tv' || m.first_air_date ? 'tv' : 'movie', m.id, 1, 1,
+      { title, poster: m.poster_path });
   view.appendChild(el);
 }
 
@@ -122,6 +124,17 @@ function home() {
   const tr = api('trending/all/day');
   const list = (tr.results || []).filter(m => m.backdrop_path);
   if (list[0]) hero(list[0]);
+  const recent = recents(20);
+  if (recent.length) {
+    const s = document.createElement('section');
+    s.className = 'row';
+    s.innerHTML = '<h2>Continue Watching</h2>';
+    const t = document.createElement('div');
+    t.className = 'track';
+    recent.forEach(r => t.appendChild(recentCard(r)));
+    s.appendChild(t);
+    view.appendChild(s);
+  }
   row('Trending', list);
   row('Movies', (api('trending/movie/day').results || []));
   row('TV Shows', (api('trending/tv/day').results || []));
@@ -170,7 +183,8 @@ function detail(param) {
     <span>${year}</span><span>${d.runtime ? d.runtime + ' min' : ''}</span></div>
     <p class="desc" style="-webkit-line-clamp:6">${d.overview || ''}</p>
     <button class="btn f" tabindex="0" style="margin-top:8px">▶ Play</button></div>`;
-  h.querySelector('.btn').onclick = () => Native.play(type, id, 1, 1);
+  h.querySelector('.btn').onclick = () => playMedia(type, id, 1, 1,
+    { title, poster: d.poster_path });
   view.appendChild(h);
   if (type === 'tv') seasons(id, d.seasons || []);
 }
@@ -204,7 +218,8 @@ function loadEps(id, season, box) {
     d.innerHTML = `<span class="num">S${season}E${e.episode_number}</span>
       <b>${e.name || 'Episode ' + e.episode_number}</b>
       <small>${e.air_date || ''}</small>`;
-    d.onclick = () => Native.play('tv', id, season, e.episode_number);
+    d.onclick = () => playMedia('tv', id, season, e.episode_number,
+      { title: 'Show ' + id, poster: '' });
     box.appendChild(d);
   });
 }
