@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Donkey TV</string>
+    <string name="hint_cursor">D-pad: move cursor / OK: click / BACK: exit cursor</string>
+</resources>
