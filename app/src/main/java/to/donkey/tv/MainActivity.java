@@ -7,9 +7,7 @@ import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -29,7 +27,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -51,7 +48,7 @@ public class MainActivity extends Activity {
             "chymiadolors.com", "doebirddrowner.com"
     };
 
-    private static final String PLAYER_JS =
+    private static final String PLAYER_CSS =
             "(function(){try{var s=document.createElement('style');"
           + "s.textContent='html,body{background:#000 !important;margin:0 !important;"
           + "overflow:hidden !important;}::-webkit-scrollbar{width:0;height:0;}"
@@ -64,9 +61,7 @@ public class MainActivity extends Activity {
           + "var d=document;"
           + "var v=d.querySelector('video');"
           + "if(!v){var fs=d.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){"
-          + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"
-          + "if(!v){for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage('toggle','*');}catch(e){}}}"
-          + "if(!v)return 'no';"
+          + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"          + "if(!v)return 'no';"
           + "if(v.paused){v.play();}else{v.pause();}"
           + "return 'ok';"
           + "}catch(e){return 'no';}})();";
@@ -134,7 +129,8 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView v, String url) {
                 progress.setVisibility(View.GONE);
                 if (url != null && url.contains("vidstuck.cc")) {
-                    v.evaluateJavascript(PLAYER_JS, null);
+                    v.evaluateJavascript(PLAYER_CSS, null);
+                    injectAsset(v, "player.js");
                     hideSystemUi();
                 }
             }
@@ -171,6 +167,18 @@ public class MainActivity extends Activity {
         hideSystemUi();
     }
 
+    private void injectAsset(WebView v, String name) {
+        try {
+            InputStream in = getAssets().open(name);
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            in.close();
+            v.evaluateJavascript(bo.toString("UTF-8"), null);
+        } catch (Exception ignored) {}
+    }
+
     /* ---------------- JS bridge ---------------- */
 
     private class Bridge {
@@ -186,7 +194,6 @@ public class MainActivity extends Activity {
                     .putString(KEY_TMDB, k.trim()).apply();
         }
 
-        /* Blocking HTTP GET, returns the body or "{}" on failure. */
         @JavascriptInterface
         public String get(String path) {
             String key = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -235,15 +242,15 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        private SharedPreferences prefs() { return getSharedPreferences(PREFS, MODE_PRIVATE); }
-
-        @JavascriptInterface
-        public String getRecent() { return prefs().getString("recent", "[]"); }
+        public String getRecent() {
+            return getSharedPreferences(PREFS, MODE_PRIVATE).getString("recent", "[]");
+        }
 
         @JavascriptInterface
         public void addRecent(String json) {
             try {
-                JSONArray a = new JSONArray(prefs().getString("recent", "[]"));
+                SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+                JSONArray a = new JSONArray(p.getString("recent", "[]"));
                 JSONObject n = new JSONObject(json);
                 String key = n.getString("type") + ":" + n.optString("id");
                 JSONArray out = new JSONArray();
@@ -252,12 +259,16 @@ public class MainActivity extends Activity {
                     JSONObject o = a.getJSONObject(i);
                     if (!(o.getString("type") + ":" + o.optString("id")).equals(key)) out.put(o);
                 }
-                prefs().edit().putString("recent", out.toString()).apply();
+                p.edit().putString("recent", out.toString()).apply();
             } catch (Exception ignored) {}
         }
 
         @JavascriptInterface
-        public void clearRecent() { prefs().edit().remove("recent").apply(); }
+        public void clearRecent() {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove("recent").apply();
+        }
+
+        @JavascriptInterface
         public void quit() {
             runOnUiThread(MainActivity.this::finish);
         }
@@ -276,64 +287,82 @@ public class MainActivity extends Activity {
     }
 
     private void mediaKey(int code) {
-    if (code == KeyEvent.KEYCODE_MEDIA_STOP) {
-        if (playerMode) { playerMode = false; web.loadUrl(UI_URL); }
-        return;
+        if (code == KeyEvent.KEYCODE_MEDIA_STOP) {
+            if (playerMode) { playerMode = false; web.loadUrl(UI_URL); }
+            return;
+        }
+        if (!playerMode) return;
+        if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+         || code == KeyEvent.KEYCODE_MEDIA_REWIND) {
+            int dir = code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ? 10 : -10;
+            web.evaluateJavascript("(function(){var v=document.querySelector('video');"
+                + "if(!v)return;v.currentTime=Math.max(0,v.currentTime+" + dir + ");})()", null);
+            return;
+        }
+        web.evaluateJavascript(TOGGLE_PLAY, null);
     }
-    if (!playerMode) return;
-    if (code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
-     || code == KeyEvent.KEYCODE_MEDIA_REWIND) {
-        int dir = code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ? 10 : -10;
-        web.evaluateJavascript("(function(){var v=document.querySelector('video');"
-            + "if(!v)return;v.currentTime=Math.max(0,v.currentTime+" + dir + ");})()", null);
-        return;
-    }
-    web.evaluateJavascript(TOGGLE_PLAY, null);
-}
 
     @Override
-public boolean dispatchKeyEvent(KeyEvent e) {
-    int c = e.getKeyCode();
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        int c = e.getKeyCode();
 
-    if (isMediaKey(c)) {
-        if (e.getAction() == KeyEvent.ACTION_DOWN) mediaKey(c);
-        return true;
-    }
+        if (isMediaKey(c)) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN) mediaKey(c);
+            return true;
+        }
 
-    /* --- NEW: D-pad moves focus one card at a time --- */
-    if (c == KeyEvent.KEYCODE_DPAD_LEFT  || c == KeyEvent.KEYCODE_DPAD_RIGHT
-     || c == KeyEvent.KEYCODE_DPAD_UP    || c == KeyEvent.KEYCODE_DPAD_DOWN) {
-        if (!playerMode) {
+        if (c == KeyEvent.KEYCODE_BACK) {
+            if (e.getAction() == KeyEvent.ACTION_UP) return true;
+            if (playerMode) {
+                web.evaluateJavascript("window.dkPlayerBack&&dkPlayerBack()", null);
+                playerMode = false;
+                web.loadUrl(UI_URL);
+                return true;
+            }
+            if (backArmed) { finish(); return true; }
+            web.evaluateJavascript(
+                "(function(){return window.dkBack?dkBack():false;})()", r -> {
+                    if (r == null || r.contains("false")) {
+                        backArmed = true;
+                        handler.postDelayed(() -> backArmed = false, 2500);
+                        Toast.makeText(this, "Press BACK again to exit",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            return true;
+        }
+
+        if (playerMode) {
+            String d = null;
+            if (c == KeyEvent.KEYCODE_DPAD_LEFT) d = "left";
+            else if (c == KeyEvent.KEYCODE_DPAD_RIGHT) d = "right";
+            else if (c == KeyEvent.KEYCODE_DPAD_UP) d = "up";
+            else if (c == KeyEvent.KEYCODE_DPAD_DOWN) d = "down";
+            else if (c == KeyEvent.KEYCODE_DPAD_CENTER || c == KeyEvent.KEYCODE_ENTER) d = "ok";
+            else if (c == KeyEvent.KEYCODE_MENU) d = "menu";
+            if (d != null) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                    web.evaluateJavascript("window.dkPlayer&&dkPlayer('" + d + "')", null);
+                }
+                return true;
+            }
+            return super.dispatchKeyEvent(e);
+        }
+
+        if (c == KeyEvent.KEYCODE_DPAD_LEFT || c == KeyEvent.KEYCODE_DPAD_RIGHT
+         || c == KeyEvent.KEYCODE_DPAD_UP || c == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (e.getAction() == KeyEvent.ACTION_DOWN) {
-                String d = c == KeyEvent.KEYCODE_DPAD_LEFT  ? "left"
+                String d = c == KeyEvent.KEYCODE_DPAD_LEFT ? "left"
                          : c == KeyEvent.KEYCODE_DPAD_RIGHT ? "right"
-                         : c == KeyEvent.KEYCODE_DPAD_UP    ? "up" : "down";
+                         : c == KeyEvent.KEYCODE_DPAD_UP ? "up" : "down";
                 web.evaluateJavascript("dkMove('" + d + "')", null);
             }
             return true;
         }
-        return super.dispatchKeyEvent(e);   // let the player handle arrows
-    }
-    /* --- end new block --- */
 
-    if (c == KeyEvent.KEYCODE_BACK) {
-        if (e.getAction() == KeyEvent.ACTION_UP) return true;
-        if (playerMode) { playerMode = false; web.loadUrl(UI_URL); return true; }
-        if (backArmed) { finish(); return true; }
-        web.evaluateJavascript(
-            "(function(){return window.dkBack?dkBack():false;})()", r -> {
-                if (r == null || r.contains("false")) {
-                    backArmed = true;
-                    handler.postDelayed(() -> backArmed = false, 2500);
-                    Toast.makeText(this, "Press BACK again to exit",
-                            Toast.LENGTH_SHORT).show();
-                }
-            });
-        return true;
+        return super.dispatchKeyEvent(e);
     }
 
-    return super.dispatchKeyEvent(e);
-}
     private void hideSystemUi() {
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
