@@ -387,11 +387,38 @@ public class MainActivity extends Activity {
 
     private boolean route(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme();
-        if (scheme.equals("http") || scheme.equals("https")) return false;
+        if (scheme.equals("http") || scheme.equals("https")) {
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            if (host.endsWith("donkey.to") && path.startsWith("/watch-now")) {
+                String embed = buildEmbed(uri);
+                if (embed != null) {
+                    webView.loadUrl(embed);
+                    return true;
+                }
+            }
+            return false;
+        }
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (Exception ignored) { }
         return true;
+    }
+
+    /* Rewrite donkey.to's watch page into the bare player URL. */
+    private String buildEmbed(Uri uri) {
+        String type = uri.getQueryParameter("type");
+        String id = uri.getQueryParameter("id");
+        if (id == null || id.isEmpty()) return null;
+        if ("tv".equals(type)) {
+            String season = uri.getQueryParameter("seasonId");
+            String episode = uri.getQueryParameter("episodeId");
+            if (season == null || season.isEmpty()) season = "1";
+            if (episode == null || episode.isEmpty()) episode = "1";
+            return "https://vidstuck.cc/embed/tv/" + id + "/" + season
+                 + "/" + episode + "?loading=2&color=FFA500";
+        }
+        return "https://vidstuck.cc/embed/movie/" + id + "?loading=2&color=FFA500";
     }
 
     /* ------------------------------------------------------------------
