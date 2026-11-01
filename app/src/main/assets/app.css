@@ -1,6 +1,6 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif}
-body{padding-top:72px}
+body{padding-top:72px;padding-bottom:30px}
 ::-webkit-scrollbar{width:0;height:0}
 a{text-decoration:none;color:inherit}
 :focus{outline:none}
@@ -53,12 +53,12 @@ a{text-decoration:none;color:inherit}
   border-radius:14px;overflow:hidden}
 .hd .ph img{width:100%;height:100%;object-fit:cover}
 .hd h1{font-size:40px;margin-bottom:12px}
-.seasons{display:flex;gap:10px;padding:0 52px;margin-bottom:8px;
+.seasons{display:flex;gap:10px;padding:10px 52px 6px;margin-bottom:8px;
   overflow-x:auto;scroll-behavior:smooth}
 .chip{padding:9px 20px;border-radius:8px;background:#1f1f1f;color:#bbb;
   font-size:14px;cursor:pointer;flex:0 0 auto}
 .chip.on{background:#e50914;color:#fff;font-weight:700}
-.eps{display:flex;gap:14px;overflow-x:auto;padding:12px 52px 50px;
+.eps{display:flex;gap:14px;overflow-x:auto;padding:16px 52px 34px;
   scroll-behavior:smooth}
 .ep{flex:0 0 auto;width:236px;background:#181818;border-radius:10px;
   padding:14px;cursor:pointer}
