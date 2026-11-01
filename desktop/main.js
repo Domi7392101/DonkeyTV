@@ -61,8 +61,11 @@ const getKey = () => store.key || DEFAULT_KEY;
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1600,
-    height: 900,
+    width: 1440,
+    height: 880,
+    minWidth: 940,
+    minHeight: 600,
+    center: true,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     show: false,
@@ -78,7 +81,7 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
 
-  win.once('ready-to-show', () => { win.maximize(); win.show(); win.focus(); });
+  win.once('ready-to-show', () => { win.show(); win.focus(); });
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
@@ -100,9 +103,12 @@ function createWindow() {
     cb({ responseHeaders: h });
   });
 
-  win.webContents.on('did-finish-load', () => {
+ win.webContents.on('did-finish-load', () => {
     const url = win.webContents.getURL();
-    if (playerMode || url.includes(PLAYER_HOST)) injectPlayer();
+    if (playerMode || url.includes(PLAYER_HOST)) { injectPlayer(); return; }
+    try {
+      win.webContents.insertCSS(fs.readFileSync(path.join(__dirname, 'pc.css'), 'utf8'));
+    } catch (e) {}
   });
 
   win.webContents.on('did-frame-finish-load', () => {
@@ -233,6 +239,23 @@ function onKey(e, input) {
     e.preventDefault();
     win.webContents.executeJavaScript("dkMove('" + dir + "')").catch(() => {});
   }
+}
+
+/* ---------------- updates ---------------- */
+
+function startUpdater() {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', () => {
+    flash('Update ready — restart to install');
+  });
+  autoUpdater.on('error', () => {});
+
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 8000);
+  setInterval(check, 4 * 60 * 60 * 1000);
 }
 
 /* ---------------- ipc ---------------- */
