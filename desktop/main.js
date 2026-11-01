@@ -314,6 +314,14 @@ function github(method, url, token, body) {
   });
 }
 
+function readSyncCfg() {
+  const paths = [path.join(app.getPath('userData'), 'sync.json'), path.join(ASSETS, 'sync.json')];
+  for (const p of paths) {
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) {}
+  }
+  return null;
+}
+
 ipcMain.handle('sync:config', () => {
   try {
     return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8'));
@@ -322,7 +330,8 @@ ipcMain.handle('sync:config', () => {
 
 ipcMain.handle('sync:pull', async () => {
   let c = null;
-  try { c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8')); } catch (e) { return ''; }
+  const c = readSyncCfg();
+  if (!c || !c.token || !c.gist) return '';
   if (!c || !c.token || !c.gist) return '';
   const r = await github('GET', 'https://api.github.com/gists/' + c.gist, c.token, null);
   if (r.code !== 200) return '';
@@ -334,7 +343,8 @@ ipcMain.handle('sync:pull', async () => {
 
 ipcMain.handle('sync:push', async (e, json) => {
   let c = null;
-  try { c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8')); } catch (err) { return false; }
+  const c = readSyncCfg();
+  if (!c || !c.token || !c.gist) return '';
   if (!c || !c.token || !c.gist) return false;
   const r = await github('PATCH', 'https://api.github.com/gists/' + c.gist, c.token, {
     files: { 'donkeytv.json': { content: json } }
