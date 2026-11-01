@@ -4,6 +4,7 @@ const { app, BrowserWindow, Menu, session, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 
 const API = 'https://api.themoviedb.org/3/';
 const DEFAULT_KEY = 'd88536984444877994f39818edf26560';
@@ -47,15 +48,21 @@ try { store = JSON.parse(fs.readFileSync(STORE, 'utf8')) || {}; } catch (e) { st
 store.prefs = store.prefs || {};
 const save = () => { try { fs.writeFileSync(STORE, JSON.stringify(store)); } catch (e) {} };
 
-/* session map: survives going to the player and back, dies with the app */
 const sessionMap = new Map();
 
 let win = null;
-let playerMode = false;
 let backArmed = false;
 let typing = false;
 
 const getKey = () => store.key || DEFAULT_KEY;
+
+const isPlayer = () => {
+  try { return win.webContents.getURL().includes(PLAYER_HOST); } catch (e) { return false; }
+};
+
+const isUI = () => {
+  try { return win.webContents.getURL().split('?')[0].endsWith('index.html'); } catch (e) { return false; }
+};
 
 /* ---------------- window ---------------- */
 
@@ -85,7 +92,6 @@ function createWindow() {
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  /* ad domains: abort the request, same list as the Android build */
   session.defaultSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (d, cb) => {
     try {
       const h = new URL(d.url).hostname.toLowerCase();
@@ -94,7 +100,6 @@ function createWindow() {
     cb({});
   });
 
-  /* TMDB responses get a wildcard CORS header so the file:// page can read them */
   session.defaultSession.webRequest.onHeadersReceived((d, cb) => {
     if (!d.url.includes('api.themoviedb.org')) return cb({});
     const h = d.responseHeaders || {};
@@ -103,16 +108,25 @@ function createWindow() {
     cb({ responseHeaders: h });
   });
 
+  win.webContents.on('did-start-navigation', () => {
+    typing = false;
+    backArmed = false;
+  });
+
   win.webContents.on('did-finish-load', () => {
-    const url = win.webContents.getURL();
-    if (playerMode || url.includes(PLAYER_HOST)) { injectPlayer(); return; }
+    if (isPlayer()) { injectPlayer(); return; }
     try {
       win.webContents.insertCSS(fs.readFileSync(path.join(__dirname, 'pc.css'), 'utf8'));
     } catch (e) {}
+    setTimeout(focusUI, 90);
   });
 
   win.webContents.on('did-frame-finish-load', () => {
-    if (playerMode) injectPlayer();
+    if (isPlayer()) injectPlayer();
+  });
+
+  win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => {
+    if (isMain && code !== -3) setTimeout(loadUI, 350);
   });
 
   win.webContents.on('before-input-event', onKey);
@@ -121,6 +135,14 @@ function createWindow() {
   win.webContents.focus();
 
   startUpdater();
+}
+
+function focusUI() {
+  win.webContents.focus();
+  win.webContents.executeJavaScript(
+    "(function(){var e=document.querySelector('#view .f, #nav a');" +
+    "if(e)try{e.focus({preventScroll:true})}catch(x){}})()"
+  ).catch(() => {});
 }
 
 function injectPlayer() {
@@ -144,7 +166,8 @@ function flash(msg) {
 }
 
 function loadUI() {
-  playerMode = false;
+  backArmed = false;
+  typing = false;
   win.loadFile(UI_FILE);
 }
 
@@ -173,21 +196,21 @@ function onKey(e, input) {
   if (input.type !== 'keyDown') return;
   const k = input.key;
   const low = (k || '').toLowerCase();
+  const player = isPlayer();
 
-  /* media keys */
   if (k === 'MediaPlayPause' || k === 'MediaPlay' || k === 'MediaPause' || k === 'MediaTrackNext') {
     e.preventDefault();
-    if (playerMode) win.webContents.executeJavaScript(TOGGLE_PLAY).catch(() => {});
+    if (player) win.webContents.executeJavaScript(TOGGLE_PLAY).catch(() => {});
     return;
   }
   if (k === 'MediaStop') {
     e.preventDefault();
-    if (playerMode) loadUI();
+    if (player) loadUI();
     return;
   }
   if (k === 'MediaRewind' || k === 'MediaFastForward') {
     e.preventDefault();
-    if (!playerMode) return;
+    if (!player) return;
     const dir = k === 'MediaFastForward' ? 10 : -10;
     win.webContents.executeJavaScript(
       "(function(){var v=document.querySelector('video');if(!v)return;" +
@@ -202,30 +225,28 @@ function onKey(e, input) {
     return;
   }
 
-  /* back / escape */
-  if (k === 'Escape' || k === 'Backspace') {
-    if (typing && k === 'Backspace') return;
+  /* Backspace: always a hard way out of the player, no matter the state */
+  if (k === 'Backspace' && !typing) {
     e.preventDefault();
-    if (playerMode) {
+    if (player) { loadUI(); return; }
+    back();
+    return;
+  }
+
+  if (k === 'Escape') {
+    e.preventDefault();
+    if (player) {
       win.webContents.executeJavaScript(
         "(function(){return window.dkPlayerBack?dkPlayerBack():false;})()"
       ).then(r => { if (r !== true) loadUI(); }).catch(() => loadUI());
       return;
     }
-    if (backArmed) { app.quit(); return; }
-    win.webContents.executeJavaScript(
-      "(function(){return window.dkBack?dkBack():false;})()"
-    ).then(r => {
-      if (r !== true) {
-        backArmed = true;
-        flash('Press Esc again to exit');
-        setTimeout(() => { backArmed = false; }, 2500);
-      }
-    }).catch(() => {});
+    if (!isUI()) { loadUI(); return; }
+    back();
     return;
   }
 
-  if (playerMode) {
+  if (player) {
     let d = ARROWS[k];
     if (!d && WASD[low]) d = WASD[low];
     if (k === 'Enter' || k === ' ' || k === 'NumpadEnter') d = 'ok';
@@ -234,7 +255,6 @@ function onKey(e, input) {
     return;
   }
 
-  /* browse UI: arrows only, everything else stays native */
   let dir = ARROWS[k];
   if (!dir && !typing && WASD[low]) dir = WASD[low];
   if (dir) {
@@ -243,22 +263,84 @@ function onKey(e, input) {
   }
 }
 
+function back() {
+  if (backArmed) { app.quit(); return; }
+  win.webContents.executeJavaScript(
+    "(function(){return window.dkBack?dkBack():false;})()"
+  ).then(r => {
+    if (r !== true) {
+      backArmed = true;
+      flash('Press Esc again to exit');
+      setTimeout(() => { backArmed = false; }, 2500);
+    }
+  }).catch(() => {});
+}
+
 /* ---------------- updates ---------------- */
 
 function startUpdater() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('update-downloaded', () => {
-    flash('Update ready — restart to install');
-  });
+  autoUpdater.on('update-downloaded', () => flash('Update ready — restart to install'));
   autoUpdater.on('error', () => {});
-
   const check = () => autoUpdater.checkForUpdates().catch(() => {});
   setTimeout(check, 8000);
   setInterval(check, 4 * 60 * 60 * 1000);
 }
+
+/* ---------------- sync ---------------- */
+
+function github(method, url, token, body) {
+  return new Promise(resolve => {
+    const data = body ? JSON.stringify(body) : null;
+    const req = https.request(url, {
+      method,
+      headers: Object.assign({
+        'Authorization': 'token ' + token,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'DonkeyTV',
+        'Content-Length': data ? Buffer.byteLength(data) : 0
+      }, data ? { 'Content-Type': 'application/json' } : {})
+    }, res => {
+      let out = '';
+      res.on('data', c => { out += c; });
+      res.on('end', () => resolve({ code: res.statusCode, body: out }));
+    });
+    req.on('error', () => resolve({ code: 0, body: '' }));
+    req.setTimeout(12000, () => { req.destroy(); resolve({ code: 0, body: '' }); });
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+ipcMain.handle('sync:config', () => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8'));
+  } catch (e) { return null; }
+});
+
+ipcMain.handle('sync:pull', async () => {
+  let c = null;
+  try { c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8')); } catch (e) { return ''; }
+  if (!c || !c.token || !c.gist) return '';
+  const r = await github('GET', 'https://api.github.com/gists/' + c.gist, c.token, null);
+  if (r.code !== 200) return '';
+  try {
+    const f = JSON.parse(r.body).files['donkeytv.json'];
+    return f ? (f.content || '') : '';
+  } catch (e) { return ''; }
+});
+
+ipcMain.handle('sync:push', async (e, json) => {
+  let c = null;
+  try { c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'sync.json'), 'utf8')); } catch (err) { return false; }
+  if (!c || !c.token || !c.gist) return false;
+  const r = await github('PATCH', 'https://api.github.com/gists/' + c.gist, c.token, {
+    files: { 'donkeytv.json': { content: json } }
+  });
+  return r.code === 200;
+});
 
 /* ---------------- ipc ---------------- */
 
@@ -303,7 +385,6 @@ ipcMain.on('nav:play', (e, a) => {
   const url = a.type === 'tv'
     ? 'https://vidstuck.cc/embed/tv/' + a.id + '/' + a.s + '/' + a.e + '?loading=2&color=FFA500'
     : 'https://vidstuck.cc/embed/movie/' + a.id + '?loading=2&color=FFA500';
-  playerMode = true;
   win.loadURL(url);
 });
 ipcMain.on('nav:leave', loadUI);
