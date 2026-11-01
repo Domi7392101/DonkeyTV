@@ -118,6 +118,7 @@ function createWindow() {
     try {
       win.webContents.insertCSS(fs.readFileSync(path.join(__dirname, 'pc.css'), 'utf8'));
     } catch (e) {}
+    injectSync();
     setTimeout(focusUI, 90);
   });
 
@@ -152,6 +153,13 @@ function injectPlayer() {
     f.executeJavaScript(PLAYER_CSS).catch(() => {});
     f.executeJavaScript(js).catch(() => {});
   }
+}
+
+function injectSync() {
+  if (!isUI()) return;
+  let js = '';
+  try { js = fs.readFileSync(path.join(ASSETS, 'sync.js'), 'utf8'); } catch (e) { return; }
+  win.webContents.executeJavaScript(js).catch(() => {});
 }
 
 function flash(msg) {
@@ -296,7 +304,10 @@ function readSyncCfg() {
     path.join(ASSETS, 'sync.json')
   ];
   for (const p of paths) {
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) {}
+    try {
+      const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (c && c.token && c.gist) return c;
+    } catch (e) {}
   }
   return null;
 }
