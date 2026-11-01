@@ -1,6 +1,6 @@
 (function () {
-  if (window.__dkVer === 6) return;
-  window.__dkVer = 6;
+  if (window.__dkVer === 7) return;
+  window.__dkVer = 7;
 
   var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0;
   var forced = [];
@@ -103,9 +103,10 @@
   function isSlider(e) {
     if (!e) return false;
     var c = String(e.getAttribute('class') || ''), l = e.getAttribute('aria-label') || '';
+    /* class names are NOT searched for words: Tailwind's "duration-200" etc. is on every button */
     return e.getAttribute('role') === 'slider' ||
            (/touch-none/.test(c) && /cursor-pointer/.test(c)) ||
-           /seek|progress|timeline|scrub|duration/i.test(l + ' ' + c);
+           /^(seek|progress|timeline|scrub|duration|video progress)/i.test(l.trim());
   }
 
   function collect() {
