@@ -197,9 +197,13 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void clearKey() {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_TMDB).apply();
+        }
+        
+        @JavascriptInterface
         public String get(String path) {
-            String key = getSharedPreferences(PREFS, MODE_PRIVATE)
-                    .getString(KEY_TMDB, "");
+            String key = getKey();
             if (key.isEmpty()) return "{\"error\":\"nokey\"}";
             String url = API + path + (path.contains("?") ? "&" : "?")
                     + "api_key=" + key + "&language=en-US";
@@ -209,13 +213,21 @@ public class MainActivity extends Activity {
                 c.setConnectTimeout(12000);
                 c.setReadTimeout(12000);
                 c.setRequestProperty("Accept", "application/json");
-                InputStream in = c.getInputStream();
+                int code = c.getResponseCode();
+                InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
                 ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
-                in.close();
-                return bo.toString("UTF-8");
+                if (in != null) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                    in.close();
+                }
+                String body = bo.toString("UTF-8");
+                if (code >= 400) {
+                    return "{\"error\":\"http\",\"code\":" + code +
+                           ",\"body\":" + JSONObject.quote(body) + "}";
+                }
+                return body;
             } catch (Exception e) {
                 return "{\"error\":\"net\"}";
             } finally {
