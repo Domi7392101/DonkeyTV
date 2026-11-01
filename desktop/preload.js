@@ -44,9 +44,9 @@ if (location.protocol === 'file:') {
     addRecent(j) { ipcRenderer.send('recent:add', j); },
     clearRecent() { ipcRenderer.send('recent:clear'); },
 
-    quit() { ipcRenderer.send('app:quit'); }
+    quit() { ipcRenderer.send('app:quit'); },
     syncConfig() { return ipcRenderer.invoke('sync:config'); },
     syncPull() { return ipcRenderer.invoke('sync:pull'); },
-    syncPush(j) { return ipcRenderer.invoke('sync:push', j); },
+    syncPush(j) { return ipcRenderer.invoke('sync:push', j); }
   });
 }
