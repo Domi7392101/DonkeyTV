@@ -17,18 +17,22 @@ const band = e => e.closest('.grid, .track, .eps, .seasons');
 const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
 
 /* keep the focused element in view: slide the row sideways if it has one,
-   and scroll the page vertically if the element is near/over the screen edge */
+   and scroll the page vertically if the element is near/over the screen edge.
+   Sizes are in rem so this scales with the layout. */
 function reveal(el) {
+  const REM = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const strip = el.closest('.track, .eps, .seasons');
   if (strip && strip.scrollWidth > strip.clientWidth + 4) {
-    const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 90;
+    const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 4 * REM;
     if (r.left < b.left + pad) strip.scrollLeft -= (b.left + pad - r.left);
     else if (r.right > b.right - pad) strip.scrollLeft += (r.right - b.right + pad);
   }
   const r = el.getBoundingClientRect();
+  const top = 6.2 * REM, bottom = 3.5 * REM;   /* nav height + margin / bottom margin */
   let y = null;
-  if (r.top < 96) y = Math.max(0, window.pageYOffset + r.top - 112);
-  else if (r.bottom > innerHeight - 70) y = window.pageYOffset + r.bottom - innerHeight + 90;
+  if (r.top < top) y = Math.max(0, window.pageYOffset + r.top - top - 1.2 * REM);
+  else if (r.bottom > innerHeight - bottom)
+    y = window.pageYOffset + r.bottom - innerHeight + bottom + 1.5 * REM;
   if (y === null) return;
   /* absolute target, so repeated key presses never undershoot */
   try { window.scrollTo({ top: y, behavior: 'smooth' }); }
@@ -36,6 +40,30 @@ function reveal(el) {
 }
 
 function focusEl(el) { if (!el) return; el.focus({ preventScroll: true }); reveal(el); }
+
+/* up/down: go to the NEAREST ROW above/below first, then the closest column in it.
+   The column is remembered so passing through a short row (Play button, nav)
+   and coming back lands where you started. */
+let colX = null, colEl = null;
+function pickRow(cur, cands, dir) {
+  const r = cur.getBoundingClientRect();
+  const cy = r.top + r.height / 2;
+  if (colEl !== cur || colX === null) colX = r.left + r.width / 2;
+  const rows = cands.map(e => {
+    const q = e.getBoundingClientRect();
+    return { e, q, dy: q.top + q.height / 2 - cy };
+  }).filter(o => dir === 'down' ? o.dy > 24 : o.dy < -24);
+  if (!rows.length) return null;
+  const near = Math.min.apply(null, rows.map(o => Math.abs(o.dy)));
+  let best = null, bs = 1e12;
+  rows.filter(o => Math.abs(o.dy) < near + 40).forEach(o => {
+    const span = Math.max(o.q.left - colX, 0, colX - o.q.right);
+    const sc = span * 1000 + Math.abs(o.q.left + o.q.width / 2 - colX);
+    if (sc < bs) { bs = sc; best = o.e; }
+  });
+  colEl = best;
+  return best;
+}
 
 function moveFocus(dir) {
   const t = Date.now();
@@ -95,6 +123,9 @@ function moveFocus(dir) {
     });
     return focusEl(below[0]);
   }
+
+  if (dir === 'up' || dir === 'down') return focusEl(pickRow(cur, cands, dir));
+  colX = null;
 
   const r = cur.getBoundingClientRect();
   let best = null, bestD = 1e9;
@@ -183,15 +214,15 @@ function recents(limit) {
 function recentPage() {
   const list = recents(0);
   const bar = document.createElement('div');
-  bar.style.cssText = 'padding:20px 52px 0';
-  bar.innerHTML = '<h1 style="font-size:26px;margin-bottom:16px">Recently Watched</h1>';
+  bar.style.cssText = 'padding:1.4rem var(--side) 0';
+  bar.innerHTML = '<h1 style="font-size:1.5rem;margin-bottom:1rem">Recently Watched</h1>';
   const g = document.createElement('div');
   g.className = 'grid';
   list.forEach(r => g.appendChild(recentCard(r)));
   const clr = document.createElement('button');
   clr.className = 'btn ghost f'; clr.tabIndex = 0;
   clr.textContent = 'Clear all';
-  clr.style.marginTop = '16px';
+  clr.style.marginTop = '1.2rem'; clr.style.marginLeft = 'var(--side)';
   clr.onclick = () => { Native.clearRecent(); render('recent'); };
   view.appendChild(bar);
   if (!list.length) {
@@ -341,8 +372,8 @@ function detail(param) {
     <div><h1>${title}</h1>
     <div class="meta"><span class="score">★ ${(d.vote_average || 0).toFixed(1)}</span>
     <span>${year}</span><span>${d.runtime ? d.runtime + ' min' : ''}</span></div>
-    <p class="desc" style="-webkit-line-clamp:6">${d.overview || ''}</p>
-    <button class="btn f" tabindex="0" style="margin-top:8px">▶ Play</button></div>`;
+    <p class="desc" style="-webkit-line-clamp:4">${d.overview || ''}</p>
+    <button class="btn f" tabindex="0" style="margin-top:.5rem">▶ Play</button></div>`;
   h.querySelector('.btn').onclick = () => playMedia(type, id, 1, 1,
     { title, poster: d.poster_path });
   view.appendChild(h);
