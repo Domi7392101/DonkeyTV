@@ -348,9 +348,14 @@ public class MainActivity extends Activity {
         if (c == KeyEvent.KEYCODE_BACK) {
             if (e.getAction() == KeyEvent.ACTION_UP) return true;
             if (playerMode) {
-                web.evaluateJavascript("window.dkPlayerBack&&dkPlayerBack()", null);
-                playerMode = false;
-                web.loadUrl(UI_URL);
+                /* first BACK closes the control bar / menu, second one leaves the player */
+                web.evaluateJavascript(
+                    "(function(){return window.dkPlayerBack?dkPlayerBack():false;})()", r -> {
+                        if (r == null || !r.contains("true")) {
+                            playerMode = false;
+                            web.loadUrl(UI_URL);
+                        }
+                    });
                 return true;
             }
             if (backArmed) { finish(); return true; }
