@@ -5,6 +5,12 @@ const view = document.getElementById('view');
 const SEL = '.f, .btn, #nav a, input';
 let lock = 0;
 
+/* fade images in when they finish loading (load doesn't bubble -> capture) */
+document.addEventListener('load', e => {
+  const t = e.target;
+  if (t && t.tagName === 'IMG') t.classList.add('loaded');
+}, true);
+
 const vis = e => e.offsetParent !== null && !e.disabled;
 const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zone : ''; };
 const band = e => e.closest('.grid, .track, .eps, .seasons');
@@ -20,8 +26,10 @@ function scrollTo(el) {
     return;
   }
   const r = el.getBoundingClientRect();
-  if (r.top < 96) window.scrollBy(0, r.top - 112);
-  else if (r.bottom > innerHeight - 70) window.scrollBy(0, r.bottom - innerHeight + 90);
+  if (r.top < 96)
+    window.scrollTo({ top: Math.max(0, scrollY + r.top - 112), behavior: 'smooth' });
+  else if (r.bottom > innerHeight - 70)
+    window.scrollTo({ top: scrollY + r.bottom - innerHeight + 90, behavior: 'smooth' });
 }
 
 function focusEl(el) { if (!el) return; el.focus({ preventScroll: true }); scrollTo(el); }
@@ -200,7 +208,33 @@ function bootError(msg) {
   setTimeout(() => d.querySelector('.btn').focus(), 60);
 }
 
+/* TMDB calls block the page, so paint a skeleton first, then load */
+let rid = 0;
+const SLOW = ['home', 'movies', 'tv', 'detail'];
+
+function skeleton(route) {
+  const d = document.createElement('div');
+  d.className = 'skel';
+  const cards = n => '<div class="sc"><div class="ph"></div></div>'.repeat(n);
+  if (route === 'home')
+    d.innerHTML = `<div class="shim sk-hero"></div><div class="sk-row">${cards(8)}</div>`;
+  else if (route === 'detail')
+    d.innerHTML = `<div class="sk-hd"><div class="shim sk-poster"></div>
+      <div class="sk-lines"><i class="shim"></i><i class="shim"></i><i class="shim"></i></div></div>`;
+  else
+    d.innerHTML = `<div class="sk-grid">${cards(12)}</div>`;
+  return d;
+}
+
 function render(route, param) {
+  const my = ++rid;
+  if (!SLOW.includes(route)) return draw(route, param);
+  view.innerHTML = '';
+  view.appendChild(skeleton(route));
+  setTimeout(() => { if (my === rid) draw(route, param); }, 60);
+}
+
+function draw(route, param) {
   view.innerHTML = '';
   try {
     const k = Native.getKey() || '';
