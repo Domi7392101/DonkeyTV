@@ -190,15 +190,30 @@ function recentPage() {
   } else { view.appendChild(g); view.appendChild(clr); }
 }
 
+function bootError(msg) {
+  const d = document.createElement('div');
+  d.id = 'setup';
+  d.innerHTML = `<h1>Can't load anything</h1><p>${msg}</p>
+    <button class="btn f" tabindex="0">Enter a different API key</button>`;
+  d.querySelector('.btn').onclick = () => setup();
+  view.appendChild(d);
+  setTimeout(() => d.querySelector('.btn').focus(), 60);
+}
+
 function render(route, param) {
   view.innerHTML = '';
-  if (!Native.getKey()) return setup();
-  if (route === 'home') return home();
-  if (route === 'movies') return grid('movie');
-  if (route === 'tv') return grid('tv');
-  if (route === 'search') return search();
-  if (route === 'detail') return detail(param);
-  if (route === 'recent') return recentPage();
+  try {
+    const k = Native.getKey() || '';
+    if (!k || k === 'PASTE_YOUR_TMDB_KEY_HERE') return setup();
+    if (route === 'home') return home();
+    if (route === 'movies') return grid('movie');
+    if (route === 'tv') return grid('tv');
+    if (route === 'search') return search();
+    if (route === 'detail') return detail(param);
+    if (route === 'recent') return recentPage();
+  } catch (e) {
+    bootError('Unexpected error: ' + e.message);
+  }
 }
 
 function hero(m) {
@@ -220,6 +235,8 @@ function hero(m) {
 
 function home() {
   const tr = api('trending/all/day');
+  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (tr.error) return bootError('Network problem reaching TMDB.');
   const list = (tr.results || []).filter(m => m.backdrop_path);
   if (list[0]) hero(list[0]);
   const recent = recents(20);
@@ -242,6 +259,8 @@ function home() {
 
 function grid(kind) {
   const d = api(kind + '/popular');
+  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (tr.error) return bootError('Network problem reaching TMDB.');
   const g = document.createElement('div');
   g.className = 'grid';
   (d.results || []).forEach(m => g.appendChild(card(m)));
@@ -270,6 +289,8 @@ function search() {
 }
 
 function detail(param) {
+  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (tr.error) return bootError('Network problem reaching TMDB.');
   const [type, id] = param.split(':');
   const d = api(type + '/' + id);
   if (!d.id) { view.innerHTML = '<div class="load">Not found.</div>'; return; }
