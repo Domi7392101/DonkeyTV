@@ -1,7 +1,7 @@
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = '1';
 
-const { autoUpdater } = require('electron-updater');
 const { app, BrowserWindow, Menu, session, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 
@@ -103,7 +103,7 @@ function createWindow() {
     cb({ responseHeaders: h });
   });
 
- win.webContents.on('did-finish-load', () => {
+  win.webContents.on('did-finish-load', () => {
     const url = win.webContents.getURL();
     if (playerMode || url.includes(PLAYER_HOST)) { injectPlayer(); return; }
     try {
@@ -119,6 +119,8 @@ function createWindow() {
 
   win.loadFile(UI_FILE);
   win.webContents.focus();
+
+  startUpdater();
 }
 
 function injectPlayer() {
