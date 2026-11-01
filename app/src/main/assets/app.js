@@ -16,23 +16,26 @@ const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zon
 const band = e => e.closest('.grid, .track, .eps, .seasons');
 const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
 
-/* scroll ONLY the horizontal strip when there is one */
-function scrollTo(el) {
+/* keep the focused element in view: slide the row sideways if it has one,
+   and scroll the page vertically if the element is near/over the screen edge */
+function reveal(el) {
   const strip = el.closest('.track, .eps, .seasons');
   if (strip && strip.scrollWidth > strip.clientWidth + 4) {
     const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 90;
     if (r.left < b.left + pad) strip.scrollLeft -= (b.left + pad - r.left);
     else if (r.right > b.right - pad) strip.scrollLeft += (r.right - b.right + pad);
-    return;
   }
   const r = el.getBoundingClientRect();
-  if (r.top < 96)
-    window.scrollTo({ top: Math.max(0, scrollY + r.top - 112), behavior: 'smooth' });
-  else if (r.bottom > innerHeight - 70)
-    window.scrollTo({ top: scrollY + r.bottom - innerHeight + 90, behavior: 'smooth' });
+  let y = null;
+  if (r.top < 96) y = Math.max(0, window.pageYOffset + r.top - 112);
+  else if (r.bottom > innerHeight - 70) y = window.pageYOffset + r.bottom - innerHeight + 90;
+  if (y === null) return;
+  /* absolute target, so repeated key presses never undershoot */
+  try { window.scrollTo({ top: y, behavior: 'smooth' }); }
+  catch (e) { window.scrollTo(0, y); }
 }
 
-function focusEl(el) { if (!el) return; el.focus({ preventScroll: true }); scrollTo(el); }
+function focusEl(el) { if (!el) return; el.focus({ preventScroll: true }); reveal(el); }
 
 function moveFocus(dir) {
   const t = Date.now();
