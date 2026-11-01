@@ -66,6 +66,10 @@ public class MainActivity extends Activity {
           + "return 'ok';"
           + "}catch(e){return 'no';}})();";
 
+    /* lives as long as the app is open: survives going to the player and back */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> session =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private WebView web;
     private FrameLayout fullscreenHolder;
     private ProgressBar progress;
@@ -256,6 +260,42 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean isCustomKey() {
+            return !getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_TMDB, "").isEmpty();
+        }
+
+        @JavascriptInterface
+        public String getPref(String k, String def) {
+            return getSharedPreferences(PREFS, MODE_PRIVATE).getString("p_" + k, def);
+        }
+
+        @JavascriptInterface
+        public void setPref(String k, String v) {
+            if (k == null || v == null) return;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("p_" + k, v).apply();
+        }
+
+        @JavascriptInterface
+        public String sessGet(String k) {
+            String v = k == null ? null : session.get(k);
+            return v == null ? "" : v;
+        }
+
+        @JavascriptInterface
+        public void sessSet(String k, String v) {
+            if (k == null) return;
+            if (v == null || v.isEmpty()) session.remove(k); else session.put(k, v);
+        }
+
+        @JavascriptInterface
+        public void setRecent(String json) {
+            try {
+                new JSONArray(json);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("recent", json).apply();
+            } catch (Exception ignored) {}
+        }
+
+        @JavascriptInterface
         public String getRecent() {
             return getSharedPreferences(PREFS, MODE_PRIVATE).getString("recent", "[]");
         }
@@ -266,12 +306,12 @@ public class MainActivity extends Activity {
                 SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
                 JSONArray a = new JSONArray(p.getString("recent", "[]"));
                 JSONObject n = new JSONObject(json);
-                String key = n.getString("type") + ":" + n.optString("id");
+                String key = n.getString("type") + ":" + n.optString("id") + ":" + n.optString("profile");
                 JSONArray out = new JSONArray();
                 out.put(n);
-                for (int i = 0; i < a.length() && out.length() < 50; i++) {
+                for (int i = 0; i < a.length() && out.length() < 200; i++) {
                     JSONObject o = a.getJSONObject(i);
-                    if (!(o.getString("type") + ":" + o.optString("id")).equals(key)) out.put(o);
+                    if (!(o.getString("type") + ":" + o.optString("id") + ":" + o.optString("profile")).equals(key)) out.put(o);
                 }
                 p.edit().putString("recent", out.toString()).apply();
             } catch (Exception ignored) {}

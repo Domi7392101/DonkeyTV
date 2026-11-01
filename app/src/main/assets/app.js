@@ -11,13 +11,68 @@ document.addEventListener('load', e => {
   if (t && t.tagName === 'IMG') t.classList.add('loaded');
 }, true);
 
-const navEl = document.getElementById('nav');
-window.addEventListener('scroll', () => navEl.classList.toggle('solid', window.pageYOffset > 24),
-  { passive: true });
+/* ---- tiny storage helpers (native prefs; in-memory fallback if the bridge is missing) ---- */
+const mem = {};
+function pref(k, d) {
+  try { const v = Native.getPref(k, d); return v == null ? d : v; }
+  catch (e) { return k in mem ? mem[k] : d; }
+}
+function setPref(k, v) { try { Native.setPref(k, String(v)); } catch (e) { mem[k] = String(v); } }
+function sessGet(k) {
+  try { return Native.sessGet(k) || ''; }
+  catch (e) { try { return sessionStorage.getItem('dk_' + k) || ''; } catch (e2) { return ''; } }
+}
+function sessSet(k, v) {
+  try { Native.sessSet(k, v); }
+  catch (e) { try { sessionStorage.setItem('dk_' + k, v); } catch (e2) {} }
+}
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+let toastT2 = 0;
+function toast(msg) {
+  let t = document.getElementById('toast2');
+  if (!t) { t = document.createElement('div'); t.id = 'toast2'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastT2);
+  toastT2 = setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+function btn(label, cls, fn) {
+  const b = document.createElement('button');
+  b.className = cls; b.tabIndex = 0; b.textContent = label; b.onclick = fn;
+  return b;
+}
+
+/* ---- state shared by the rail and the pages ---- */
+const TABS = ['search', 'home', 'movies', 'tv', 'recent', 'settings'];
+let lastTab = 'home';
+let rootParam = null;
+let lastContent = null;
+let profiles = [], active = null;
+const COLORS = ['#e50914', '#1f8ef1', '#f5a623', '#2ecc71', '#9b59b6', '#e91e63', '#00bcd4', '#ff7043'];
+
+function markTab(route) {
+  if (TABS.indexOf(route) >= 0) lastTab = route;
+  document.querySelectorAll('#nav a').forEach(a =>
+    a.classList.toggle('on', a.dataset.go === lastTab));
+}
+
+function applyPrefs() {
+  document.body.classList.toggle('calm', pref('anim', '1') === '0');
+  document.body.classList.toggle('nobd', pref('bd', '1') === '0');
+}
+
+/* remember where you were in the page, so RIGHT from the rail returns there */
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  if (t && t.closest && !t.closest('#nav') && t.matches && t.matches('.f, input')) lastContent = t;
+});
 
 const vis = e => e.offsetParent !== null && !e.disabled;
 const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zone : ''; };
-const band = e => e.closest('.grid, .track, .eps, .seasons');
+const band = e => e.closest('.grid, .track, .eps, .seasons, .pfs, .sws');
 const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
 
 /* keep the focused element in view: slide the row sideways if it has one,
@@ -25,13 +80,8 @@ const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
    Sizes are in rem so this scales with the layout. */
 function reveal(el) {
   const REM = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  /* the nav is fixed to the screen: never scroll the page for it, just go back to the top */
-  if (el.closest('#nav')) {
-    if (window.pageYOffset > 0) {
-      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
-    }
-    return;
-  }
+  /* the rail is fixed to the screen: never scroll the page for it */
+  if (el.closest('#nav')) return;
   const strip = el.closest('.track, .eps, .seasons');
   if (strip && strip.scrollWidth > strip.clientWidth + 4) {
     const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 4 * REM;
@@ -39,7 +89,7 @@ function reveal(el) {
     else if (r.right > b.right - pad) strip.scrollLeft += (r.right - b.right + pad);
   }
   const r = el.getBoundingClientRect();
-  const top = 6.2 * REM, bottom = 3.5 * REM;   /* nav height + margin / bottom margin */
+  const top = 3 * REM, bottom = 3.5 * REM;   /* top / bottom safe margins */
   let y = null;
   if (r.top < top) y = Math.max(0, window.pageYOffset + r.top - top - 1.2 * REM);
   else if (r.bottom > innerHeight - bottom)
@@ -72,8 +122,6 @@ function pickRow(cur, cands, dir) {
     const sc = span * 1000 + Math.abs(o.q.left + o.q.width / 2 - colX);
     if (sc < bs) { bs = sc; best = o.e; }
   });
-  /* going up into the nav lands on the tab you are on, not whichever is nearest */
-  if (best && best.closest('#nav')) best = document.querySelector('#nav a.on') || best;
   colEl = best;
   return best;
 }
@@ -85,11 +133,26 @@ function moveFocus(dir) {
 
   const all = pool();
   const cur = document.activeElement;
-  if (!cur || !all.includes(cur)) return focusEl(all[0]);
+  if (!cur || !all.includes(cur)) return focusEl(firstContent() || all[0]);
+
+  /* ---- the side rail: up/down move inside it, right goes back to the page ---- */
+  if (cur.closest('#nav')) {
+    const items = all.filter(e => e.closest('#nav'));
+    const i = items.indexOf(cur);
+    if (dir === 'up') return focusEl(items[Math.max(0, i - 1)]);
+    if (dir === 'down') return focusEl(items[Math.min(items.length - 1, i + 1)]);
+    if (dir === 'right') {
+      const back = lastContent && document.contains(lastContent) && vis(lastContent)
+        ? lastContent : firstContent();
+      return focusEl(back);
+    }
+    return;
+  }
 
   if (cur.tagName === 'INPUT') {
     if (dir === 'left' || dir === 'right') {
       const p = cur.selectionStart;
+      if (dir === 'left' && !p) return focusNav();
       const n = dir === 'left' ? Math.max(0, p - 1) : Math.min(cur.value.length, p + 1);
       cur.setSelectionRange(n, n);
       return;
@@ -99,12 +162,19 @@ function moveFocus(dir) {
 
   const z = zone(cur);
   const b = band(cur);
-  let cands = all.filter(e => e !== cur);
+  /* the rail is never a target for normal moves, only for LEFT at a row's left edge */
+  let cands = all.filter(e => e !== cur && !e.closest('#nav'));
 
-  /* left/right never leaves the strip, grid or nav row you are in */
+  /* left/right never leaves the strip/grid you are in; loose buttons only see their own line */
   if (dir === 'left' || dir === 'right') {
     if (b) cands = cands.filter(e => band(e) === b);
-    if (cur.closest('#nav')) cands = cands.filter(e => e.closest('#nav'));
+    else {
+      const rc = cur.getBoundingClientRect();
+      cands = cands.filter(e => {
+        const q = e.getBoundingClientRect();
+        return q.top < rc.bottom && q.bottom > rc.top;
+      });
+    }
   }
 
   /* episode row -> the selected season chip, never a random one */
@@ -137,11 +207,6 @@ function moveFocus(dir) {
     return focusEl(below[0]);
   }
 
-  /* down from the nav -> first thing in the page */
-  if (dir === 'down' && cur.closest('#nav')) {
-    colX = null;
-    return focusEl(view.querySelector('.f, input') || null);
-  }
   if (dir === 'up' || dir === 'down') return focusEl(pickRow(cur, cands, dir));
   colX = null;
 
@@ -157,6 +222,8 @@ function moveFocus(dir) {
     if (dir === 'down'  && dy >  8) score =  dy + Math.abs(dx) * 3;
     if (score !== undefined && score < bestD) { bestD = score; best = e; }
   }
+  /* nothing further left: open the rail */
+  if (!best && dir === 'left') return focusNav();
   focusEl(best);
 }
 window.dkMove = moveFocus;
@@ -192,15 +259,13 @@ const poster = p => p ? IMG + 'w342' + p : '';
 const wide = p => p ? IMG + 'w1280' + p : '';
 
 function go(route, param, push = true) {
-  if (push) stack.push([root, null]);
-  root = route;
-  document.querySelectorAll('#nav a').forEach(a =>
-    a.classList.toggle('on', a.dataset.go === route));
+  if (push && !(route === root && param === rootParam)) stack.push([root, rootParam]);
+  root = route; rootParam = param;
   render(route, param);
 }
 
 window.dkBack = function () {
-  if (stack.length) { const [r] = stack.pop(); root = r; render(r); return true; }
+  if (stack.length) { const [r, p] = stack.pop(); root = r; rootParam = p; render(r, p); return true; }
   return false;
 };
 
@@ -269,7 +334,7 @@ function row(title, items) {
 
 function playMedia(type, id, s, e, meta) {
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
-                profile: 'default', ts: Date.now() };
+                profile: active || 'default', ts: Date.now() };
   try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
   Native.play(type, id, s, e);
 }
@@ -287,14 +352,14 @@ function recentCard(r) {
 function recents(limit) {
   let list = [];
   try { list = JSON.parse(Native.getRecent() || '[]'); } catch (e) {}
-  list = list.filter(r => r.profile === 'default');
+  list = list.filter(r => (r.profile || 'default') === (active || 'default'));
   return limit ? list.slice(0, limit) : list;
 }
 
 function recentPage() {
   const list = recents(0);
   const bar = document.createElement('div');
-  bar.style.cssText = 'padding:1.4rem var(--side) 0';
+  bar.style.cssText = 'padding:2.6rem var(--side) 0';
   bar.innerHTML = '<h1 style="font-size:1.5rem;margin-bottom:1rem">Recently Watched</h1>';
   const g = document.createElement('div');
   g.className = 'grid';
@@ -303,13 +368,14 @@ function recentPage() {
   clr.className = 'btn ghost f'; clr.tabIndex = 0;
   clr.textContent = 'Clear all';
   clr.style.marginTop = '1.2rem'; clr.style.marginLeft = 'var(--side)';
-  clr.onclick = () => { Native.clearRecent(); render('recent'); };
+  clr.onclick = () => { dropHistory(active); render('recent'); };
   view.appendChild(bar);
   if (!list.length) {
     const p = document.createElement('div');
     p.className = 'load'; p.textContent = 'Nothing watched yet.';
     view.appendChild(p);
   } else { view.appendChild(g); view.appendChild(clr); }
+  setTimeout(() => focusEl(view.querySelector('.f')), 50);
 }
 
 function bootError(msg) {
@@ -342,6 +408,8 @@ function skeleton(route) {
 
 function render(route, param) {
   const my = ++rid;
+  markTab(route);
+  document.body.classList.toggle('nobar', route === 'profiles' || route === 'profedit');
   if (!SLOW.includes(route)) return draw(route, param);
   view.innerHTML = '';
   view.appendChild(skeleton(route));
@@ -351,6 +419,9 @@ function render(route, param) {
 function draw(route, param) {
   view.innerHTML = '';
   try {
+    if (route === 'profiles') return profilesPage(param === 'manage');
+    if (route === 'profedit') return profEdit(param);
+    if (route === 'settings') return settingsPage(param);
     const k = Native.getKey() || '';
     if (!k || k === 'PASTE_YOUR_TMDB_KEY_HERE') return setup();
     if (route === 'home') return home();
@@ -524,6 +595,303 @@ function setup() {
   setTimeout(() => input.focus(), 80);
 }
 
+/* ================= side rail focus helpers ================= */
+
+function focusNav() {
+  if (document.body.classList.contains('nobar')) return;
+  const items = [...document.querySelectorAll('#nav a')].filter(vis);
+  if (!items.length) return;
+  focusEl(items.find(a => a.dataset.go === lastTab) || items[0]);
+}
+
+function firstContent() {
+  return [...view.querySelectorAll('.f, input')].find(vis) || null;
+}
+
+/* ================= profiles ================= */
+
+const initial = n => (String(n || '?').trim().charAt(0) || '?').toUpperCase();
+const saveProfiles = () => setPref('profiles', JSON.stringify(profiles));
+
+function loadProfiles() {
+  try { profiles = JSON.parse(pref('profiles', '[]')) || []; } catch (e) { profiles = []; }
+  if (!Array.isArray(profiles) || !profiles.length) {
+    /* 'default' keeps everything watched before profiles existed */
+    profiles = [{ id: 'default', name: 'Me', color: COLORS[0] }];
+    saveProfiles();
+  }
+}
+
+function paintAvatar() {
+  const p = profiles.find(x => x.id === active);
+  const me = document.querySelector('#nav a.me');
+  if (!p || !me) return;
+  const av = me.querySelector('.av');
+  av.style.background = p.color;
+  av.textContent = initial(p.name);
+  me.querySelector('span').textContent = p.name;
+}
+
+function chooseProfile(p) {
+  active = p.id;
+  sessSet('active', p.id);
+  setPref('lastProfile', p.id);
+  paintAvatar();
+  stack.length = 0;
+  go('home', null, false);
+}
+
+/* remove one profile's watch history (profile ids are stored on every entry) */
+function dropHistory(id) {
+  let all = [];
+  try { all = JSON.parse(Native.getRecent() || '[]'); } catch (e) {}
+  const keep = all.filter(r => (r.profile || 'default') !== id);
+  try { Native.setRecent(JSON.stringify(keep)); }
+  catch (e) { try { Native.clearRecent(); } catch (e2) {} }
+}
+
+function profilesPage(manage) {
+  const w = document.createElement('div');
+  w.className = 'who' + (manage ? ' managing' : '');
+  w.innerHTML = `<h1>${manage ? 'Manage Profiles' : "Who's watching?"}</h1><div class="pfs"></div>`;
+  const row = w.querySelector('.pfs');
+  const last = pref('lastProfile', '');
+  const tiles = [];
+
+  profiles.forEach(p => {
+    const t = document.createElement('div');
+    t.className = 'pf f'; t.tabIndex = 0; t.dataset.id = p.id;
+    t.innerHTML = `<i class="av" style="background:${esc(p.color)}">${esc(initial(p.name))}</i>
+      <b>${esc(p.name)}</b><span class="edit">Edit</span>`;
+    t.onclick = () => manage ? go('profedit', p.id) : chooseProfile(p);
+    row.appendChild(t);
+    tiles.push(t);
+  });
+
+  if (profiles.length < 5) {
+    const a = document.createElement('div');
+    a.className = 'pf f'; a.tabIndex = 0;
+    a.innerHTML = '<i class="av add">+</i><b>Add Profile</b>';
+    a.onclick = () => go('profedit', 'new');
+    row.appendChild(a);
+  }
+
+  const toggle = manage
+    ? btn('Done', 'btn pri f', () => { rootParam = null; render('profiles'); })
+    : btn('Manage Profiles', 'btn ghost f', () => { rootParam = 'manage'; render('profiles', 'manage'); });
+  w.appendChild(toggle);
+  view.appendChild(w);
+  setTimeout(() => focusEl(tiles.find(t => t.dataset.id === last) || tiles[0]), 60);
+}
+
+function profEdit(param) {
+  const isNew = param === 'new';
+  const src = isNew ? null : profiles.find(x => x.id === param);
+  if (!isNew && !src) return go('profiles', null, false);
+  const p = isNew
+    ? { id: 'p' + Date.now().toString(36), name: '', color: COLORS[profiles.length % COLORS.length] }
+    : { id: src.id, name: src.name, color: src.color };
+
+  const w = document.createElement('div');
+  w.className = 'who';
+  w.innerHTML = `<h1>${isNew ? 'Add Profile' : 'Edit Profile'}</h1>
+    <i class="av big"></i>
+    <input id="pn" maxlength="14" placeholder="Name" autocomplete="off">
+    <div class="sws"></div><div class="acts"></div>`;
+  const av = w.querySelector('.av'), inp = w.querySelector('#pn');
+  const sws = w.querySelector('.sws'), acts = w.querySelector('.acts');
+  inp.value = p.name;
+
+  const paint = () => { av.style.background = p.color; av.textContent = initial(p.name || '?'); };
+  paint();
+  inp.oninput = () => { p.name = inp.value; paint(); };
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.keyCode === 13) {
+      ev.preventDefault(); inp.blur();
+      focusEl(sws.querySelector('.sw.on') || sws.firstChild);
+    }
+  });
+
+  COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'sw f' + (c === p.color ? ' on' : ''); s.tabIndex = 0;
+    s.style.background = c;
+    s.onclick = () => {
+      p.color = c;
+      sws.querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === s));
+      paint();
+    };
+    sws.appendChild(s);
+  });
+
+  const leave = () => { if (!window.dkBack()) go('profiles', null, false); };
+
+  acts.appendChild(btn('Save', 'btn pri f', () => {
+    p.name = p.name.trim() || ('Profile ' + (profiles.length + (isNew ? 1 : 0)));
+    if (isNew) profiles.push(p); else Object.assign(src, p);
+    saveProfiles();
+    if (active === p.id) paintAvatar();
+    toast(isNew ? 'Profile added' : 'Profile saved');
+    leave();
+  }));
+  acts.appendChild(btn('Cancel', 'btn ghost f', leave));
+
+  if (!isNew && profiles.length > 1) {
+    let armed = false, tm = 0;
+    const del = btn('Delete', 'btn ghost danger f', () => {
+      if (!armed) {
+        armed = true; del.textContent = 'Press again to delete';
+        tm = setTimeout(() => { armed = false; del.textContent = 'Delete'; }, 3500);
+        return;
+      }
+      clearTimeout(tm);
+      profiles = profiles.filter(x => x.id !== p.id);
+      saveProfiles();
+      dropHistory(p.id);
+      toast('Profile deleted');
+      if (active === p.id) {
+        active = null; sessSet('active', ''); stack.length = 0; go('profiles', null, false);
+      } else leave();
+    });
+    acts.appendChild(del);
+  }
+
+  view.appendChild(w);
+  setTimeout(() => isNew ? inp.focus() : focusEl(acts.firstChild), 80);
+}
+
+/* ================= settings ================= */
+
+function settingsPage(focusKey) {
+  const w = document.createElement('div');
+  w.className = 'set';
+  w.innerHTML = '<h1>Settings</h1>';
+
+  const sec = t => { const h = document.createElement('h3'); h.textContent = t; w.appendChild(h); };
+  const setVal = (d, text, cls) => {
+    const v = d.querySelector('.vl'); v.textContent = text; v.className = 'vl' + (cls ? ' ' + cls : '');
+  };
+  const line = (key, label, value, fn) => {
+    const d = document.createElement('div');
+    d.className = 'line f'; d.tabIndex = 0; d.dataset.k = key;
+    d.innerHTML = '<span class="lb"></span><span class="vl"></span>';
+    d.querySelector('.lb').textContent = label;
+    d.querySelector('.vl').textContent = value || '';
+    d.onclick = fn;
+    w.appendChild(d);
+    return d;
+  };
+  const again = key => { render('settings', key); };
+
+  /* --- profile --- */
+  const me = profiles.find(x => x.id === active);
+  sec('Profile');
+  line('prof', 'Edit profile', me ? me.name : '', () => { if (me) go('profedit', me.id); });
+  line('switch', 'Switch profile', '', () => go('profiles'));
+
+  /* --- api key --- */
+  sec('TMDB API key');
+  const key = () => { try { return Native.getKey() || ''; } catch (e) { return ''; } };
+  const mask = k => !k ? 'Not set' : k.length > 10 ? k.slice(0, 4) + '••••••••' + k.slice(-4) : '••••••••';
+  let shown = false, hideT = 0;
+  const kl = line('key', 'API key (press OK to show)', mask(key()), () => {
+    shown = !shown; clearTimeout(hideT);
+    setVal(kl, shown ? key() : mask(key()));
+    if (shown) hideT = setTimeout(() => { shown = false; setVal(kl, mask(key())); }, 8000);
+  });
+
+  let custom = null;
+  try { custom = Native.isCustomKey(); } catch (e) {}
+  if (custom !== null) line('src', 'Key source', custom ? 'Entered on this device' : 'Built into the app', () => {});
+
+  const tl = line('test', 'Test key', '', () => {
+    setVal(tl, 'Checking…');
+    setTimeout(() => {
+      const r = api('configuration');
+      if (r.error === 'http' && r.code === 401) setVal(tl, 'Rejected (401)', 'bad');
+      else if (r.error === 'nokey') setVal(tl, 'No key set', 'bad');
+      else if (r.error) setVal(tl, 'Network problem', 'bad');
+      else setVal(tl, 'Key works', 'on');
+    }, 60);
+  });
+
+  const box = document.createElement('div');
+  box.className = 'keybox'; box.hidden = true;
+  box.innerHTML = '<input id="nk" placeholder="Paste a new TMDB API key" autocomplete="off"><div class="acts"></div>';
+  const nk = box.querySelector('input'), bacts = box.querySelector('.acts');
+  const chg = line('chg', 'Change API key', '', () => {
+    box.hidden = false; setTimeout(() => nk.focus(), 40);
+  });
+  w.appendChild(box);
+  const saveKey = () => {
+    const v = nk.value.trim();
+    if (!v) return toast('Enter a key first');
+    try { Native.setKey(v); } catch (e) {}
+    toast('API key saved');
+    again('test');
+  };
+  nk.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); saveKey(); }
+  });
+  bacts.appendChild(btn('Save key', 'btn pri f', saveKey));
+  bacts.appendChild(btn('Cancel', 'btn ghost f', () => { nk.value = ''; box.hidden = true; focusEl(chg); }));
+
+  if (custom) line('reset', 'Use the built-in key', '', () => {
+    try { Native.clearKey(); } catch (e) {}
+    toast('Using the built-in key');
+    again('src');
+  });
+
+  /* --- display --- */
+  sec('Display');
+  const tog = (key, label, pk, after) => {
+    const isOn = () => pref(pk, '1') !== '0';
+    const paintT = () => setVal(l, isOn() ? 'On' : 'Off', isOn() ? 'on' : '');
+    const l = line(key, label, '', () => { setPref(pk, isOn() ? '0' : '1'); paintT(); if (after) after(); });
+    paintT();
+  };
+  tog('anim', 'Animations', 'anim', applyPrefs);
+  tog('bd', 'Live backdrop', 'bd', applyPrefs);
+  tog('intro', 'Launch intro', 'intro');
+
+  /* --- data --- */
+  sec('Data');
+  let armed = false, armT = 0;
+  const hl = line('hist', 'Clear watch history for this profile', '', () => {
+    if (!armed) {
+      armed = true; setVal(hl, 'Press OK again to confirm', 'bad');
+      armT = setTimeout(() => { armed = false; setVal(hl, ''); }, 3500);
+      return;
+    }
+    clearTimeout(armT); armed = false;
+    dropHistory(active);
+    setVal(hl, 'Cleared', 'on');
+    toast('Watch history cleared');
+  });
+
+  /* --- app --- */
+  sec('App');
+  line('exit', 'Exit app', '', () => { try { Native.quit(); } catch (e) {} });
+
+  const fine = document.createElement('p');
+  fine.className = 'fine';
+  fine.textContent = 'Movie and show data from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.';
+  w.appendChild(fine);
+
+  view.appendChild(w);
+  setTimeout(() => focusEl((focusKey && w.querySelector('[data-k="' + focusKey + '"]')) || w.querySelector('.f')), 60);
+}
+
+/* ================= start ================= */
+
+function boot() {
+  applyPrefs();
+  loadProfiles();
+  const p = profiles.find(x => x.id === sessGet('active'));
+  if (p) { active = p.id; paintAvatar(); render('home'); }
+  else { root = 'profiles'; render('profiles'); }
+}
+
 document.querySelectorAll('#nav a').forEach(a =>
   a.onclick = () => go(a.dataset.go));
-render('home');
+boot();
