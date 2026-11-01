@@ -235,7 +235,8 @@ function hero(m) {
 
 function home() {
   const tr = api('trending/all/day');
-  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (tr.error === 'http' && tr.code === 401)
+    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
   if (tr.error) return bootError('Network problem reaching TMDB.');
   const list = (tr.results || []).filter(m => m.backdrop_path);
   if (list[0]) hero(list[0]);
@@ -259,8 +260,9 @@ function home() {
 
 function grid(kind) {
   const d = api(kind + '/popular');
-  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
-  if (tr.error) return bootError('Network problem reaching TMDB.');
+  if (d.error === 'http' && d.code === 401)
+    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (d.error) return bootError('Network problem reaching TMDB.');
   const g = document.createElement('div');
   g.className = 'grid';
   (d.results || []).forEach(m => g.appendChild(card(m)));
@@ -289,10 +291,10 @@ function search() {
 }
 
 function detail(param) {
-  if (tr.error === 'http' && tr.code === 401) return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
-  if (tr.error) return bootError('Network problem reaching TMDB.');
   const [type, id] = param.split(':');
   const d = api(type + '/' + id);
+  if (d.error === 'http' && d.code === 401)
+    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
   if (!d.id) { view.innerHTML = '<div class="load">Not found.</div>'; return; }
   const title = d.title || d.name;
   const year = (d.release_date || d.first_air_date || '').slice(0, 4);
