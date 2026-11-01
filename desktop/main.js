@@ -233,6 +233,12 @@ function onKey(e, input) {
     return;
   }
 
+  if (k === 'F12') {
+    e.preventDefault();
+    win.webContents.toggleDevTools();
+    return;
+  }
+
   if (k === 'Backspace' && !typing) {
     e.preventDefault();
     if (player) { loadUI(); return; }
