@@ -21,6 +21,13 @@ const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
    Sizes are in rem so this scales with the layout. */
 function reveal(el) {
   const REM = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  /* the nav is fixed to the screen: never scroll the page for it, just go back to the top */
+  if (el.closest('#nav')) {
+    if (window.pageYOffset > 0) {
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+    }
+    return;
+  }
   const strip = el.closest('.track, .eps, .seasons');
   if (strip && strip.scrollWidth > strip.clientWidth + 4) {
     const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 4 * REM;
@@ -61,6 +68,8 @@ function pickRow(cur, cands, dir) {
     const sc = span * 1000 + Math.abs(o.q.left + o.q.width / 2 - colX);
     if (sc < bs) { bs = sc; best = o.e; }
   });
+  /* going up into the nav lands on the tab you are on, not whichever is nearest */
+  if (best && best.closest('#nav')) best = document.querySelector('#nav a.on') || best;
   colEl = best;
   return best;
 }
@@ -124,6 +133,11 @@ function moveFocus(dir) {
     return focusEl(below[0]);
   }
 
+  /* down from the nav -> first thing in the page */
+  if (dir === 'down' && cur.closest('#nav')) {
+    colX = null;
+    return focusEl(view.querySelector('.f, input') || null);
+  }
   if (dir === 'up' || dir === 'down') return focusEl(pickRow(cur, cands, dir));
   colX = null;
 
@@ -142,6 +156,30 @@ function moveFocus(dir) {
   focusEl(best);
 }
 window.dkMove = moveFocus;
+
+/* ---- living backdrop: crossfades to the backdrop of whatever you focus ---- */
+const ambLayers = [].slice.call(document.querySelectorAll('#amb .l'));
+let ambCur = 0, ambPath = '', ambTok = 0;
+function ambient(path) {
+  if (!path || path === ambPath || ambLayers.length < 2) return;
+  ambPath = path;
+  const tok = ++ambTok, url = IMG + 'w1280' + path;
+  const img = new Image();
+  img.onload = () => {
+    if (tok !== ambTok) return;              /* a newer pick won the race */
+    const next = ambLayers[1 - ambCur], prev = ambLayers[ambCur];
+    next.style.backgroundImage = 'url(' + url + ')';
+    next.classList.remove('on', 'z'); void next.offsetWidth;   /* restart the slow zoom */
+    next.classList.add('on', 'z');      /* the old layer keeps its zoom while it fades out */
+    prev.classList.remove('on');
+    ambCur = 1 - ambCur;
+  };
+  img.src = url;
+}
+document.addEventListener('focusin', e => {
+  const bd = e.target && e.target.dataset && e.target.dataset.bd;
+  if (bd) ambient(bd);
+});
 
 function api(path) {
   try { return JSON.parse(Native.get(path)); } catch (e) { return {}; }
@@ -169,6 +207,7 @@ function card(m) {
   const el = document.createElement('div');
   el.className = 'card f';
   el.tabIndex = 0;
+  el.dataset.bd = m.backdrop_path || '';
   el.innerHTML = `<div class="ph"><img loading="lazy" src="${poster(m.poster_path)}"></div>
     <b>${title}</b><small>${year}</small>`;
   el.onclick = () => go('detail', type + ':' + m.id);
@@ -289,8 +328,8 @@ function hero(m) {
   const year = (m.release_date || m.first_air_date || '').slice(0, 4);
   const el = document.createElement('div');
   el.className = 'hero';
-  el.innerHTML = `<img class="bg" src="${wide(m.backdrop_path)}"><div class="scrim"></div>
-    <div class="in"><h1>${title}</h1>
+  ambient(m.backdrop_path);
+  el.innerHTML = `<div class="in"><h1>${title}</h1>
     <div class="meta"><span class="score">★ ${(m.vote_average || 0).toFixed(1)}</span>
     <span>${year}</span></div>
     <p class="desc">${m.overview || ''}</p>
@@ -364,6 +403,7 @@ function detail(param) {
   if (d.error === 'http' && d.code === 401)
     return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
   if (!d.id) { view.innerHTML = '<div class="load">Not found.</div>'; return; }
+  ambient(d.backdrop_path);
   const title = d.title || d.name;
   const year = (d.release_date || d.first_air_date || '').slice(0, 4);
   const h = document.createElement('div');

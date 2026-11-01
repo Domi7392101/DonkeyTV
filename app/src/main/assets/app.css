@@ -4,9 +4,10 @@
   --side:3rem;--nav:4.2rem}
 html{font-size:clamp(12px,1.3vw,26px)}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:#fff;
-  font-family:Roboto,system-ui,Arial,Helvetica,sans-serif;
+html{background:var(--bg)}
+html,body{color:#fff;font-family:Roboto,system-ui,Arial,Helvetica,sans-serif;
   -webkit-font-smoothing:antialiased}
+body{background:transparent}
 body{padding-top:var(--nav);padding-bottom:3rem}
 ::-webkit-scrollbar{width:0;height:0}
 a{text-decoration:none;color:inherit}
@@ -53,12 +54,6 @@ img.loaded{opacity:1}
 /* ---------- hero ---------- */
 .hero{position:relative;height:60vh;min-height:20rem;display:flex;
   align-items:flex-end;padding:0 var(--side) 2.6rem;overflow:hidden}
-.hero img.bg{position:absolute;top:0;left:0;width:100%;height:100%;
-  object-fit:cover;object-position:center 25%;transform-origin:70% 35%;
-  animation:kb 22s ease-out forwards}
-.hero .scrim{position:absolute;top:0;left:0;right:0;bottom:0;background:
-  linear-gradient(90deg,rgba(7,7,10,.95) 0%,rgba(7,7,10,.5) 50%,transparent 100%),
-  linear-gradient(0deg,var(--bg) 0%,rgba(7,7,10,0) 55%)}
 .hero .in{position:relative;z-index:2;max-width:32rem;
   animation:rise .7s .15s var(--ease) backwards}
 .hero h1{font-size:2.3rem;line-height:1.1;margin-bottom:.7rem;font-weight:800;
@@ -80,15 +75,22 @@ img.loaded{opacity:1}
 .track{display:flex;gap:1.1rem;overflow-x:auto;padding:1rem var(--side) 1.4rem;
   scroll-padding-inline:var(--side);scroll-behavior:smooth}
 .card{flex:0 0 auto;width:9.6rem;cursor:pointer;border-radius:.8rem}
-.card .ph{width:100%;aspect-ratio:2/3;background:var(--card);border-radius:.8rem;
+.card .ph{position:relative;width:100%;aspect-ratio:2/3;background:var(--card);border-radius:.8rem;
   overflow:hidden;box-shadow:0 .3rem 1rem rgba(0,0,0,.45);
   transition:box-shadow .24s var(--ease)}
+/* light sweep across the poster when it gets focus */
+.card .ph::after{content:'';position:absolute;top:-10%;left:0;width:45%;height:120%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);
+  transform:translateX(-160%) skewX(-18deg);opacity:0;pointer-events:none}
+.card:focus .ph::after{animation:shine .9s .08s ease-out}
+@keyframes shine{0%{opacity:1;transform:translateX(-160%) skewX(-18deg)}
+  100%{opacity:1;transform:translateX(380%) skewX(-18deg)}}
 .card img{width:100%;height:100%;object-fit:cover;display:block}
 .card b{display:block;font-size:.78rem;margin-top:.6rem;font-weight:600;color:#c2c2c9;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .2s}
 .card small{color:#767680;font-size:.68rem}
 .card:focus{transform:scale(1.08);z-index:5}
-.card:focus .ph{box-shadow:0 0 0 .18rem #fff,0 1rem 2.4rem rgba(0,0,0,.75)}
+.card:focus .ph{box-shadow:0 0 0 .18rem #fff,0 0 2.6rem rgba(229,9,20,.35),0 1rem 2.4rem rgba(0,0,0,.75)}
 .card:focus b{color:#fff}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.6rem,1fr));
   gap:1.8rem 1.3rem;padding:1.6rem var(--side) 4rem}
@@ -155,3 +157,36 @@ input#q:focus{border-color:#fff;box-shadow:0 0 0 .3rem rgba(255,255,255,.12)}
 .sk-lines{flex:1;padding-top:.6rem}
 .sk-lines i{display:block;height:1.3rem;margin-bottom:1rem;width:60%}
 .sk-lines i:first-child{height:2.4rem;width:40%}
+
+/* ---------- living backdrop ---------- */
+#amb{position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;overflow:hidden;background:var(--bg)}
+#amb .l{position:absolute;top:0;left:0;width:100%;height:100%;
+  background-size:cover;background-position:center 20%;transform-origin:70% 30%;
+  opacity:0;transition:opacity 1s ease}
+#amb .l.on{opacity:1}
+#amb .l.z{animation:kb 26s ease-out forwards}
+#amb .shade{position:absolute;top:0;left:0;right:0;bottom:0;background:
+  linear-gradient(90deg,rgba(7,7,10,.93) 0%,rgba(7,7,10,.6) 42%,rgba(7,7,10,.3) 100%),
+  linear-gradient(0deg,var(--bg) 5%,rgba(7,7,10,.55) 55%,rgba(7,7,10,.7) 100%)}
+
+/* ---------- launch animation (CSS-only, so it plays even while the app loads) ---------- */
+#splash{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  pointer-events:none;animation:splashOut .7s 2.1s ease forwards}
+#splash .mark{display:flex;font-size:4rem;font-weight:900;color:var(--accent);
+  text-shadow:0 0 2.2rem rgba(229,9,20,.65)}
+#splash .mark span{display:block;opacity:0;margin:0 .06em;
+  transform:translateY(1.4rem) scale(.8);
+  animation:ltr .7s var(--ease) forwards}
+#splash .mark span:nth-child(1){animation-delay:.15s}
+#splash .mark span:nth-child(2){animation-delay:.25s}
+#splash .mark span:nth-child(3){animation-delay:.35s}
+#splash .mark span:nth-child(4){animation-delay:.45s}
+#splash .mark span:nth-child(5){animation-delay:.55s}
+#splash .mark span:nth-child(6){animation-delay:.65s}
+#splash .sweep{height:.16rem;width:0;margin-top:1.1rem;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  animation:sweep 1s .9s ease-out forwards}
+@keyframes ltr{to{opacity:1;transform:none}}
+@keyframes sweep{to{width:22rem}}
+@keyframes splashOut{to{opacity:0;visibility:hidden}}
