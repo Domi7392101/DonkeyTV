@@ -1,5 +1,6 @@
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = '1';
 
+const { autoUpdater } = require('electron-updater');
 const { app, BrowserWindow, Menu, session, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
