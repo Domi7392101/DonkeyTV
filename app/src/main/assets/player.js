@@ -1,6 +1,6 @@
 (function () {
-  if (window.__dkVer === 4) return;
-  window.__dkVer = 4;
+  if (window.__dkVer === 5) return;
+  window.__dkVer = 5;
 
   var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0;
   var forced = [];
@@ -41,13 +41,20 @@
     toastT = setTimeout(function () { t.classList.remove('on'); }, 750);
   }
 
-  /* the site's overlay wrapper is the pointer-events-none ancestor of its buttons */
+  /* the site's overlay wrapper: the nearest ancestor of its buttons that is
+     pointer-events-none, fully transparent or visibility:hidden */
+  function hiddenish(p) {
+    var cs = getComputedStyle(p);
+    return /pointer-events-none/.test(p.getAttribute('class') || '') ||
+           parseFloat(cs.opacity) < 0.05 || cs.visibility === 'hidden';
+  }
+
   function roots() {
     var out = [];
     q('[aria-label]').forEach(function (e) {
       var p = e.parentElement;
       while (p && p !== doc.body) {
-        if (/pointer-events-none/.test(p.className || '')) { out.push(p); break; }
+        if (hiddenish(p)) { out.push(p); break; }
         p = p.parentElement;
       }
     });
@@ -63,12 +70,14 @@
         forced.push(p);
       }
       p.style.setProperty('opacity', '1', 'important');
+      p.style.setProperty('visibility', 'visible', 'important');
     });
   }
 
   function unforce() {
     forced.forEach(function (p) {
       p.style.removeProperty('opacity');
+      p.style.removeProperty('visibility');
       if (p.__dkPrev) p.style.opacity = p.__dkPrev;
       delete p.__dkMark;
       delete p.__dkPrev;
@@ -76,21 +85,27 @@
     forced = [];
   }
 
-  /* must target the video, not document, or the overlay handler never sees it */
+  /* must target the video / overlay, not document, or the site's handler never sees it */
   function poke() {
     var v = video(), t = roots()[0];
     var w = innerWidth, h = innerHeight;
     [[w * 0.5, h - 50], [w * 0.5, h - 120], [w * 0.5, h * 0.85]].forEach(function (p) {
       var o = { bubbles: true, cancelable: true, clientX: p[0], clientY: p[1] };
-      if (v) { v.dispatchEvent(new PointerEvent('pointermove', o)); v.dispatchEvent(new MouseEvent('mousemove', o)); }
-      if (t) { t.dispatchEvent(new PointerEvent('pointermove', o)); t.dispatchEvent(new MouseEvent('mousemove', o)); }
+      var hit = doc.elementFromPoint(p[0], p[1]);
+      [v, t, hit].forEach(function (tg) {
+        if (!tg) return;
+        try { tg.dispatchEvent(new PointerEvent('pointermove', o)); } catch (e) {}
+        tg.dispatchEvent(new MouseEvent('mousemove', o));
+      });
     });
   }
 
   function isSlider(e) {
     if (!e) return false;
-    var c = (e.className || '') + ' ' + (e.getAttribute('aria-label') || '');
-    return /touch-none|cursor-pointer|progress|seek|timeline|scrub/i.test(c);
+    var c = String(e.getAttribute('class') || ''), l = e.getAttribute('aria-label') || '';
+    return e.getAttribute('role') === 'slider' ||
+           (/touch-none/.test(c) && /cursor-pointer/.test(c)) ||
+           /seek|progress|timeline|scrub|duration/i.test(l + ' ' + c);
   }
 
   function collect() {
@@ -162,6 +177,7 @@
     setTimeout(function () {
       if (!active) return;
       items = collect();
+      if (!items.length) toast(video() ? 'No controls found (' + roots().length + ' overlays)' : 'No video in this frame (player inside an iframe?)');
       var s = items.findIndex(isSlider);
       goTo(s >= 0 ? s : 0);
     }, 120);
