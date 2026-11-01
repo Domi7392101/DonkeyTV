@@ -11,6 +11,10 @@ document.addEventListener('load', e => {
   if (t && t.tagName === 'IMG') t.classList.add('loaded');
 }, true);
 
+const navEl = document.getElementById('nav');
+window.addEventListener('scroll', () => navEl.classList.toggle('solid', window.pageYOffset > 24),
+  { passive: true });
+
 const vis = e => e.offsetParent !== null && !e.disabled;
 const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zone : ''; };
 const band = e => e.closest('.grid, .track, .eps, .seasons');
@@ -214,6 +218,43 @@ function card(m) {
   return el;
 }
 
+const typeOf = m => (m.media_type === 'tv' || m.first_air_date) ? 'tv' : 'movie';
+
+/* landscape thumbnail with the title on it */
+function wideCard(m) {
+  const title = m.title || m.name || 'Untitled';
+  const el = document.createElement('div');
+  el.className = 'card wide f'; el.tabIndex = 0;
+  el.dataset.bd = m.backdrop_path || '';
+  el.innerHTML = `<div class="ph"><img loading="lazy" src="${IMG}w780${m.backdrop_path}">
+    <span class="cap">${title}</span></div>`;
+  el.onclick = () => go('detail', typeOf(m) + ':' + m.id);
+  return el;
+}
+
+/* big outlined rank number next to the poster */
+function rankCard(m, i) {
+  const el = document.createElement('div');
+  el.className = 'card rank f'; el.tabIndex = 0;
+  el.dataset.bd = m.backdrop_path || '';
+  el.innerHTML = `<div class="rk">${i + 1}</div>
+    <div class="ph"><img loading="lazy" src="${poster(m.poster_path)}"></div>`;
+  el.onclick = () => go('detail', typeOf(m) + ':' + m.id);
+  return el;
+}
+
+function addRow(title, els) {
+  if (!els || !els.length) return;
+  const s = document.createElement('section');
+  s.className = 'row';
+  s.innerHTML = `<h2>${title}</h2>`;
+  const t = document.createElement('div');
+  t.className = 'track';
+  els.forEach(e => t.appendChild(e));
+  s.appendChild(t);
+  view.appendChild(s);
+}
+
 function row(title, items) {
   if (!items || !items.length) return;
   const s = document.createElement('section');
@@ -333,10 +374,11 @@ function hero(m) {
     <div class="meta"><span class="score">★ ${(m.vote_average || 0).toFixed(1)}</span>
     <span>${year}</span></div>
     <p class="desc">${m.overview || ''}</p>
-    <button class="btn f" tabindex="0">▶ Play</button></div>`;
-  el.querySelector('.btn').onclick = () =>
-    playMedia(m.media_type === 'tv' || m.first_air_date ? 'tv' : 'movie', m.id, 1, 1,
-      { title, poster: m.poster_path });
+    <div class="acts"><button class="btn pri f" tabindex="0">▶ Play</button>
+    <button class="btn ghost f" tabindex="0">More Info</button></div></div>`;
+  el.querySelector('.pri').onclick = () =>
+    playMedia(typeOf(m), m.id, 1, 1, { title, poster: m.poster_path });
+  el.querySelector('.ghost').onclick = () => go('detail', typeOf(m) + ':' + m.id);
   view.appendChild(el);
 }
 
@@ -358,7 +400,8 @@ function home() {
     s.appendChild(t);
     view.appendChild(s);
   }
-  row('Trending', list);
+  addRow('Top 10 Today', list.filter(m => m.poster_path).slice(0, 10).map((m, i) => rankCard(m, i)));
+  addRow('Trending Now', list.map(wideCard));
   row('Movies', (api('trending/movie/day').results || []));
   row('TV Shows', (api('trending/tv/day').results || []));
   row('Top Rated', (api('movie/top_rated').results || []));
@@ -413,7 +456,7 @@ function detail(param) {
     <div class="meta"><span class="score">★ ${(d.vote_average || 0).toFixed(1)}</span>
     <span>${year}</span><span>${d.runtime ? d.runtime + ' min' : ''}</span></div>
     <p class="desc" style="-webkit-line-clamp:4">${d.overview || ''}</p>
-    <button class="btn f" tabindex="0" style="margin-top:.5rem">▶ Play</button></div>`;
+    <button class="btn pri f" tabindex="0" style="margin-top:.5rem">▶ Play</button></div>`;
   h.querySelector('.btn').onclick = () => playMedia(type, id, 1, 1,
     { title, poster: d.poster_path });
   view.appendChild(h);

@@ -38,6 +38,9 @@ img.loaded{opacity:1}
 #nav{position:fixed;top:0;left:0;right:0;height:var(--nav);z-index:100;
   display:flex;align-items:center;gap:.9rem;padding:0 var(--side);
   background:linear-gradient(180deg,rgba(7,7,10,.96) 0%,rgba(7,7,10,.7) 60%,rgba(7,7,10,0) 100%)}
+#nav::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;
+  background:rgba(7,7,10,.96);opacity:0;transition:opacity .35s}
+#nav.solid::before{opacity:1}
 #nav a[data-go="search"]{margin-left:auto}
 .logo{color:var(--accent);font-weight:900;font-size:1.3rem;letter-spacing:.22em;
   margin-right:1rem;text-shadow:0 0 1rem rgba(229,9,20,.45)}
@@ -92,6 +95,18 @@ img.loaded{opacity:1}
 .card:focus{transform:scale(1.08);z-index:5}
 .card:focus .ph{box-shadow:0 0 0 .18rem #fff,0 0 2.6rem rgba(229,9,20,.35),0 1rem 2.4rem rgba(0,0,0,.75)}
 .card:focus b{color:#fff}
+.card.wide{width:15.5rem}
+.card.wide .ph{aspect-ratio:16/9}
+.card .cap{position:absolute;left:0;right:0;bottom:0;padding:1.8rem .8rem .6rem;
+  font-size:.8rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;background:linear-gradient(0deg,rgba(0,0,0,.88),transparent)}
+/* Top 10: big outlined number tucked behind the poster */
+.card.rank{width:auto;display:flex;align-items:flex-end}
+.card.rank .rk{position:relative;z-index:1;flex:0 0 auto;min-width:4.6rem;margin-right:-1.3rem;
+  font-size:7.6rem;font-weight:900;line-height:.74;text-align:right;letter-spacing:-.08em;
+  color:#0b0b0e;-webkit-text-stroke:.14rem #6a6a74}
+.card.rank .ph{position:relative;z-index:2;flex:0 0 7.2rem;width:7.2rem}
+.card.rank:focus .rk{-webkit-text-stroke-color:#fff}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.6rem,1fr));
   gap:1.8rem 1.3rem;padding:1.6rem var(--side) 4rem}
 
@@ -100,8 +115,10 @@ img.loaded{opacity:1}
   background:rgba(255,255,255,.18);color:#fff;font-weight:700;font-size:.95rem;
   padding:.7rem 1.8rem;border-radius:.6rem;border:0;cursor:pointer}
 .btn.ghost{background:rgba(109,109,120,.45)}
+.btn.pri{background:#fff;color:#000}
+.acts{display:flex;gap:.8rem;align-items:center}
 .btn:focus{background:#fff;color:#000;transform:scale(1.07);z-index:5;
-  box-shadow:0 0 0 .22rem rgba(255,255,255,.25),0 .7rem 1.8rem rgba(229,9,20,.4)}
+  box-shadow:0 0 0 .2rem var(--accent),0 .7rem 1.8rem rgba(229,9,20,.45)}
 
 /* ---------- detail ---------- */
 .hd{display:flex;gap:2.2rem;padding:2.4rem var(--side) 1.6rem}
