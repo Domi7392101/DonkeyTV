@@ -24,6 +24,8 @@ import android.widget.Toast;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -61,7 +63,8 @@ public class MainActivity extends Activity {
           + "var d=document;"
           + "var v=d.querySelector('video');"
           + "if(!v){var fs=d.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){"
-          + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"          + "if(!v)return 'no';"
+          + "try{var x=fs[i].contentDocument.querySelector('video');if(x){v=x;break;}}catch(e){}}}"
+          + "if(!v)return 'no';"
           + "if(v.paused){v.play();}else{v.pause();}"
           + "return 'ok';"
           + "}catch(e){return 'no';}})();";
@@ -137,6 +140,7 @@ public class MainActivity extends Activity {
                     injectAsset(v, "player.js");
                     hideSystemUi();
                 }
+                if (url != null && url.startsWith("file://")) injectAsset(v, "sync.js");
             }
         });
 
@@ -204,7 +208,7 @@ public class MainActivity extends Activity {
         public void clearKey() {
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_TMDB).apply();
         }
-        
+
         @JavascriptInterface
         public String get(String path) {
             String key = getKey();
@@ -326,6 +330,107 @@ public class MainActivity extends Activity {
         public void quit() {
             runOnUiThread(MainActivity.this::finish);
         }
+
+        /* ---------------- sync ---------------- */
+
+        @JavascriptInterface
+        public String syncConfig() {
+            File f = getExternalFilesDir(null);
+            if (f != null) {
+                File cfg = new File(f, "sync.json");
+                try {
+                    if (cfg.exists()) {
+                        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                        InputStream in = new FileInputStream(cfg);
+                        byte[] b = new byte[4096];
+                        int n;
+                        while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                        in.close();
+                        return bo.toString("UTF-8");
+                    }
+                } catch (Exception ignored) {}
+            }
+            try {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                InputStream in = getAssets().open("sync.json");
+                byte[] b = new byte[4096];
+                int n;
+                while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                in.close();
+                return bo.toString("UTF-8");
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        private String[] syncPair() {
+            try {
+                JSONObject o = new JSONObject(syncConfig());
+                return new String[]{ o.getString("token"), o.getString("gist") };
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @JavascriptInterface
+        public String syncPull() {
+            String[] c = syncPair();
+            if (c == null) return "";
+            HttpURLConnection h = null;
+            try {
+                h = (HttpURLConnection) new URL("https://api.github.com/gists/" + c[1]).openConnection();
+                h.setConnectTimeout(12000);
+                h.setReadTimeout(12000);
+                h.setRequestProperty("Authorization", "token " + c[0]);
+                h.setRequestProperty("Accept", "application/vnd.github+json");
+                h.setRequestProperty("User-Agent", "DonkeyTV");
+                if (h.getResponseCode() >= 400) return "";
+                InputStream in = h.getInputStream();
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] b = new byte[8192];
+                int n;
+                while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                in.close();
+                JSONObject files = new JSONObject(bo.toString("UTF-8")).getJSONObject("files");
+                return files.getJSONObject("donkeytv.json").optString("content", "");
+            } catch (Exception e) {
+                return "";
+            } finally {
+                if (h != null) h.disconnect();
+            }
+        }
+
+        @JavascriptInterface
+        public boolean syncPush(String json) {
+            String[] c = syncPair();
+            if (c == null) return false;
+            HttpURLConnection h = null;
+            try {
+                h = (HttpURLConnection) new URL("https://api.github.com/gists/" + c[1]).openConnection();
+                h.setRequestMethod("PATCH");
+                h.setDoOutput(true);
+                h.setConnectTimeout(12000);
+                h.setReadTimeout(12000);
+                h.setRequestProperty("Authorization", "token " + c[0]);
+                h.setRequestProperty("Accept", "application/vnd.github+json");
+                h.setRequestProperty("User-Agent", "DonkeyTV");
+                h.setRequestProperty("Content-Type", "application/json");
+                JSONObject file = new JSONObject();
+                file.put("content", json);
+                JSONObject files = new JSONObject();
+                files.put("donkeytv.json", file);
+                JSONObject body = new JSONObject();
+                body.put("files", files);
+                byte[] out = body.toString().getBytes("UTF-8");
+                h.setFixedLengthStreamingMode(out.length);
+                h.getOutputStream().write(out);
+                return h.getResponseCode() < 400;
+            } catch (Exception e) {
+                return false;
+            } finally {
+                if (h != null) h.disconnect();
+            }
+        }
     }
 
     /* ---------------- keys ---------------- */
@@ -356,9 +461,6 @@ public class MainActivity extends Activity {
         web.evaluateJavascript(TOGGLE_PLAY, null);
     }
 
-    /* Calls dkPlayer(dir). If player.js never made it into the page (redirect to
-       another host, page finished before the player loaded, ...) inject it now and
-       retry, instead of silently doing nothing. */
     private void sendPlayerKey(final String d) {
         final String call = "(function(){if(!window.dkPlayer)return 'missing';"
                 + "dkPlayer('" + d + "');return 'ok';})()";
@@ -388,7 +490,6 @@ public class MainActivity extends Activity {
         if (c == KeyEvent.KEYCODE_BACK) {
             if (e.getAction() == KeyEvent.ACTION_UP) return true;
             if (playerMode) {
-                /* first BACK closes the control bar / menu, second one leaves the player */
                 web.evaluateJavascript(
                     "(function(){return window.dkPlayerBack?dkPlayerBack():false;})()", r -> {
                         if (r == null || !r.contains("true")) {
