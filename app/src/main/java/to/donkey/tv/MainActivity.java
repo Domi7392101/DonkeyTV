@@ -128,7 +128,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 progress.setVisibility(View.GONE);
-                if (url != null && url.contains("vidstuck.cc")) {
+                if (playerMode || (url != null && url.contains("vidstuck.cc"))) {
                     v.evaluateJavascript(PLAYER_CSS, null);
                     injectAsset(v, "player.js");
                     hideSystemUi();
@@ -316,6 +316,26 @@ public class MainActivity extends Activity {
         web.evaluateJavascript(TOGGLE_PLAY, null);
     }
 
+    /* Calls dkPlayer(dir). If player.js never made it into the page (redirect to
+       another host, page finished before the player loaded, ...) inject it now and
+       retry, instead of silently doing nothing. */
+    private void sendPlayerKey(final String d) {
+        final String call = "(function(){if(!window.dkPlayer)return 'missing';"
+                + "dkPlayer('" + d + "');return 'ok';})()";
+        web.evaluateJavascript(call, r -> {
+            if (r != null && r.contains("missing")) {
+                web.evaluateJavascript(PLAYER_CSS, null);
+                injectAsset(web, "player.js");
+                web.evaluateJavascript(call, r2 -> {
+                    if (r2 != null && r2.contains("missing")) {
+                        Toast.makeText(this, "Player script could not be loaded",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         int c = e.getKeyCode();
@@ -355,9 +375,7 @@ public class MainActivity extends Activity {
             else if (c == KeyEvent.KEYCODE_DPAD_CENTER || c == KeyEvent.KEYCODE_ENTER) d = "ok";
             else if (c == KeyEvent.KEYCODE_MENU) d = "menu";
             if (d != null) {
-                if (e.getAction() == KeyEvent.ACTION_DOWN) {
-                    web.evaluateJavascript("window.dkPlayer&&dkPlayer('" + d + "')", null);
-                }
+                if (e.getAction() == KeyEvent.ACTION_DOWN) sendPlayerKey(d);
                 return true;
             }
             return super.dispatchKeyEvent(e);
