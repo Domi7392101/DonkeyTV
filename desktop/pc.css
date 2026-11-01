@@ -1,0 +1,90 @@
+/* Desktop-only overrides. Injected on the local UI page only; the TV build never sees it. */
+html{font-size:clamp(11px,0.72vw,15px)}
+:root{--side:1.7rem;--rail:3.3rem}
+
+*{scrollbar-width:thin;scrollbar-color:#2c2c34 transparent}
+::-webkit-scrollbar{width:9px !important;height:9px !important}
+::-webkit-scrollbar-thumb{background:#2c2c34 !important;border-radius:9px !important}
+::-webkit-scrollbar-thumb:hover{background:#3d3d47 !important}
+::-webkit-scrollbar-track{background:transparent !important}
+
+body{padding-bottom:1.8rem;user-select:none;cursor:default}
+input{user-select:text}
+#view{max-width:120rem;margin:0 auto}
+
+#nav{padding:1rem 0;gap:.15rem}
+#nav:focus-within{width:11rem}
+#nav a{height:2.3rem;margin:0 .55rem;padding:0 .55rem;border-radius:.55rem}
+#nav a svg{flex:0 0 1.15rem;width:1.15rem;height:1.15rem}
+#nav a span{font-size:.82rem}
+#nav a:hover{color:#fff;background:rgba(255,255,255,.09)}
+#nav a.me{height:2.7rem}
+.av{flex:0 0 1.4rem;width:1.4rem;height:1.4rem;font-size:.75rem;border-radius:.35rem}
+
+.hero{height:50vh;min-height:15rem;padding-bottom:1.8rem}
+.hero .in{max-width:27rem}
+.hero h1{font-size:2rem}
+.desc{font-size:.85rem;-webkit-line-clamp:3}
+.meta{font-size:.78rem}
+.btn{font-size:.85rem;padding:.55rem 1.3rem;border-radius:.5rem}
+.btn:hover{background:#fff;color:#000}
+.btn.ghost:hover{background:#7c7c88}
+.btn.pri:hover{background:#e6e6e6}
+
+.row{margin:1.3rem 0 1.6rem}
+.row h2{font-size:.72rem;letter-spacing:.14em;margin-bottom:.1rem}
+.track{gap:.85rem;padding:.8rem var(--side) 1.1rem}
+.card{width:8rem;border-radius:.55rem}
+.card .ph{border-radius:.55rem;box-shadow:0 .2rem .7rem rgba(0,0,0,.5)}
+.card b{font-size:.74rem;margin-top:.45rem}
+.card small{font-size:.64rem}
+.card:focus{transform:scale(1.04)}
+.card:focus .ph{box-shadow:0 0 0 .12rem #fff,0 0 1.8rem rgba(229,9,20,.3),0 .7rem 1.6rem rgba(0,0,0,.7)}
+.card:hover .ph{box-shadow:0 0 0 .12rem rgba(255,255,255,.65),0 .6rem 1.5rem rgba(0,0,0,.7)}
+.card.wide{width:12.5rem}
+.card.rank .rk{font-size:6rem;min-width:3.2rem;margin-right:-.4rem}
+.card.rank .ph{flex:0 0 6rem;width:6rem}
+.grid{grid-template-columns:repeat(auto-fill,minmax(8rem,1fr));gap:1.4rem .9rem;padding:1.7rem var(--side) 2.6rem}
+
+.hd{gap:1.6rem;padding:1.7rem var(--side) 1.2rem}
+.hd .ph{flex:0 0 11rem}
+.hd h1{font-size:1.7rem;margin-bottom:.5rem}
+.seasons{gap:.45rem;padding:.7rem var(--side) .4rem}
+.chip{font-size:.76rem;padding:.4rem 1rem}
+.eps{gap:.7rem;padding:.8rem var(--side) 1.5rem}
+.ep{width:11rem;padding:.75rem}
+.ep b{font-size:.78rem}
+
+input#q{margin-top:1.7rem;padding:.7rem 1rem;font-size:.92rem;border-radius:.55rem}
+#setup{padding-top:4rem;max-width:36rem}
+#setup h1{font-size:1.6rem}
+.load{padding:4rem var(--side)}
+.sk-hero{height:50vh;min-height:15rem}
+.sc{flex:0 0 8rem}
+.sk-grid{grid-template-columns:repeat(auto-fill,minmax(8rem,1fr));gap:1.4rem .9rem}
+.sk-hd .sk-poster{flex:0 0 11rem}
+
+.pfs{gap:1.2rem;max-width:46rem}
+.pf{width:7rem}
+.pf .av{width:5.8rem;height:5.8rem;font-size:2.4rem;border-radius:.7rem}
+.pf b{font-size:.88rem}
+.who h1{font-size:1.8rem;margin-bottom:1.8rem}
+.who input{width:18rem;padding:.65rem .9rem;font-size:.95rem}
+.who .av.big{width:5.2rem;height:5.2rem;font-size:2.1rem;margin-bottom:1rem}
+.sw{width:1.8rem;height:1.8rem}
+
+.set{padding:1.8rem var(--side) 2.2rem;max-width:40rem}
+.set h1{font-size:1.5rem;margin-bottom:1.1rem}
+.set h3{font-size:.68rem;margin:1.3rem 0 .35rem .2rem}
+.line{padding:.7rem 1rem;margin:.2rem 0;border-radius:.55rem}
+.line .lb{font-size:.88rem}
+.line .vl{font-size:.8rem}
+.line:hover{background:rgba(255,255,255,.13)}
+.line:focus{transform:scale(1.012)}
+.keybox input{padding:.65rem .9rem;font-size:.88rem}
+.fine{font-size:.7rem;margin-top:1.4rem}
+
+#splash .mark{font-size:2.6rem}
+#splash .sweep{top:calc(50% + 2.1rem);height:.12rem}
+@keyframes sweep{to{width:14rem}}
+#toast2{bottom:1.6rem;font-size:.82rem;padding:.6rem 1.2rem}
