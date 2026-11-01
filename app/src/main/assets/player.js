@@ -1,6 +1,6 @@
 (function () {
-  if (window.__dkVer === 5) return;
-  window.__dkVer = 5;
+  if (window.__dkVer === 6) return;
+  window.__dkVer = 6;
 
   var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0;
   var forced = [];
@@ -193,24 +193,54 @@
     if (doc.activeElement && doc.activeElement.blur) doc.activeElement.blur();
   }
 
-  window.dkPlayer = function (dir) {
-    if (dir === 'down') return enter();
-    if (dir === 'up') { if (active) leave(); return; }
-    if (dir === 'menu') { if (!active) return enter(); return; }
+  /* spatial navigation between the visible controls */
+  var colX = null;
 
+  function nav(dir) {
+    var cur = items[idx];
+    items = collect();
+    idx = Math.max(0, items.indexOf(cur));
+    cur = items[idx];
+    if (!cur) return false;
+    var vertical = dir === 'up' || dir === 'down';
+    var r = cur.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (vertical) { if (colX === null) colX = cx; cx = colX; } else colX = null;
+    var best = -1, bestS = 1e9;
+    items.forEach(function (e, i) {
+      if (e === cur) return;
+      var q = e.getBoundingClientRect();
+      var qx = q.left + q.width / 2, qy = q.top + q.height / 2;
+      var dx = qx - cx, dy = qy - cy, s;
+      /* distance from the reference x to the candidate's horizontal span */
+      var span = Math.max(q.left - cx, 0, cx - q.right);
+      if (dir === 'up'    && dy < -8) s = -dy + span * 2;
+      if (dir === 'down'  && dy >  8) s =  dy + span * 2;
+      if (dir === 'left'  && dx < -8 && Math.abs(dy) < 40) s = -dx + Math.abs(dy) * 3;
+      if (dir === 'right' && dx >  8 && Math.abs(dy) < 40) s =  dx + Math.abs(dy) * 3;
+      if (s !== undefined && s < bestS) { bestS = s; best = i; }
+    });
+    if (best < 0) return false;
+    goTo(best);
+    return true;
+  }
+
+  window.dkPlayer = function (dir) {
     if (!active) {
+      if (dir === 'down' || dir === 'menu') return enter();
       if (dir === 'ok') return toggle();
       if (dir === 'left') return seek(-15);
       if (dir === 'right') return seek(15);
       return;
     }
 
-    if (!items.length) return dir === 'ok' ? toggle() : null;
+    if (dir === 'menu') return refresh();
+    if (!items.length) { if (dir === 'up') leave(); return dir === 'ok' ? toggle() : null; }
 
     if (dir === 'ok') {
       var c = items[idx];
       if (c) {
-        if (isSlider(c)) return;
+        if (isSlider(c)) return toggle();
         c.click();
         setTimeout(refresh, 260);
       }
@@ -218,10 +248,11 @@
     }
     if (dir === 'left' || dir === 'right') {
       if (isSlider(items[idx])) return seek(dir === 'left' ? -15 : 15);
-      var n = idx + (dir === 'left' ? -1 : 1);
-      if (n >= 0 && n < items.length) goTo(n);
+      nav(dir);
       return;
     }
+    if (dir === 'up') { if (!nav('up')) leave(); return; }
+    if (dir === 'down') { nav('down'); return; }
   };
 
   window.dkPlayerBack = function () {
