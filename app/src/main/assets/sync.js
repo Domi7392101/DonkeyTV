@@ -1,5 +1,7 @@
 (function () {
-  var done = false, busy = false;
+  if (typeof Native === 'undefined') return;
+
+  var done = false, busy = false, pending = null;
 
   var key = function (r) { return r.type + ':' + (r.id || '') + ':' + (r.profile || 'default'); };
 
@@ -21,11 +23,21 @@
   function write(m) {
     try { Native.setPref('profiles', JSON.stringify(m.profiles)); } catch (e) {}
     try { Native.setRecent(JSON.stringify(m.recent)); } catch (e) {}
+    schedule();
+  }
+
+  function schedule() { clearTimeout(pending); pending = setTimeout(push, 1500); }
+
+  /* syncConfig() is a parsed object on desktop, a JSON string on Android */
+  function cfgFrom(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch (e) { return null; } }
+    return raw;
   }
 
   async function pull() {
     var remote = {};
-    try { remote = JSON.parse(await Native.syncPull() || '{}') || {}; } catch (e) { return; }
+    try { remote = JSON.parse((await Native.syncPull()) || '{}') || {}; } catch (e) { return; }
     var before = JSON.stringify(local());
     var m = merge(local(), remote);
     write(m);
@@ -33,28 +45,30 @@
       done = true;
       try { sessionStorage.dkSyncReload = 1; } catch (e) {}
       location.reload();
+      return;
     }
     done = true;
   }
 
   async function push() {
-    if (busy) return;
+    if (busy) { schedule(); return; }
     busy = true;
     var remote = {};
-    try { remote = JSON.parse(await Native.syncPull() || '{}') || {}; } catch (e) {}
+    try { remote = JSON.parse((await Native.syncPull()) || '{}') || {}; } catch (e) {}
     var m = merge(local(), remote);
-    write(m);
+    try { Native.setPref('profiles', JSON.stringify(m.profiles)); } catch (e) {}
+    try { Native.setRecent(JSON.stringify(m.recent)); } catch (e) {}
     try { await Native.syncPush(JSON.stringify(m)); } catch (e) {}
     busy = false;
   }
 
   (async function () {
     var cfg = null;
-    try { cfg = await Native.syncConfig(); } catch (e) {}
+    try { cfg = cfgFrom(await Native.syncConfig()); } catch (e) {}
     if (!cfg || !cfg.token || !cfg.gist) return;
     await pull();
     setInterval(push, 15000);
     addEventListener('beforeunload', push);
+    addEventListener('pagehide', push);
   })();
 })();
-
