@@ -185,7 +185,9 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String getKey() {
-            return getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_TMDB, "");
+            String k = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_TMDB, "");
+            if (k.isEmpty()) k = BuildConfig.DEFAULT_TMDB_KEY;
+            return k;
         }
 
         @JavascriptInterface
