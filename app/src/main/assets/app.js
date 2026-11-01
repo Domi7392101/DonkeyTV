@@ -7,13 +7,14 @@ let lock = 0;
 
 const vis = e => e.offsetParent !== null && !e.disabled;
 const zone = e => { const z = e.closest('[data-zone]'); return z ? z.dataset.zone : ''; };
+const band = e => e.closest('.grid, .track, .eps, .seasons');
 const pool = () => [...document.querySelectorAll(SEL)].filter(vis);
 
 /* scroll ONLY the horizontal strip when there is one */
 function scrollTo(el) {
   const strip = el.closest('.track, .eps, .seasons');
   if (strip && strip.scrollWidth > strip.clientWidth + 4) {
-    const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 70;
+    const b = strip.getBoundingClientRect(), r = el.getBoundingClientRect(), pad = 90;
     if (r.left < b.left + pad) strip.scrollLeft -= (b.left + pad - r.left);
     else if (r.right > b.right - pad) strip.scrollLeft += (r.right - b.right + pad);
     return;
@@ -45,11 +46,13 @@ function moveFocus(dir) {
   }
 
   const z = zone(cur);
+  const b = band(cur);
   let cands = all.filter(e => e !== cur);
 
-  /* stay inside the row you are on */
-  if ((z === 'eps' || z === 'seasons') && (dir === 'left' || dir === 'right')) {
-    cands = cands.filter(e => zone(e) === z);
+  /* left/right never leaves the strip, grid or nav row you are in */
+  if (dir === 'left' || dir === 'right') {
+    if (b) cands = cands.filter(e => band(e) === b);
+    if (cur.closest('#nav')) cands = cands.filter(e => e.closest('#nav'));
   }
 
   /* episode row -> the selected season chip, never a random one */
