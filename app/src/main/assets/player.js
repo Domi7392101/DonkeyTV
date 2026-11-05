@@ -1,11 +1,14 @@
 (function () {
-  if (window.__dkVer === 7) return;
-  window.__dkVer = 7;
+  if (window.__dkVer === 8) return;
+  window.__dkVer = 8;
 
-  var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0;
-  var forced = [];
+  var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0, navT = 0, tuT = 0;
+  var forced = [], ringed = null, rootsCache = [], rootsDirty = true, itemsDirty = true, seenEl;
+  var nextOpen = false, nextIdx = 0, nextBtns = [], nextDismissed = false, mo = null;
 
   var q = function (s, r) { return [].slice.call((r || doc).querySelectorAll(s)); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
 
   function video() { return doc.querySelector('video'); }
 
@@ -50,15 +53,18 @@
   }
 
   function roots() {
+    if (!rootsDirty && rootsCache.length) return rootsCache;
     var out = [];
     q('[aria-label]').forEach(function (e) {
-      var p = e.parentElement;
-      while (p && p !== doc.body) {
+      var p = e.parentElement, hops = 0;
+      while (p && p !== doc.body && hops++ < 12) {
         if (hiddenish(p)) { out.push(p); break; }
         p = p.parentElement;
       }
     });
-    return out.filter(function (v, i, a) { return a.indexOf(v) === i; });
+    rootsCache = out.filter(function (v, i, a) { return a.indexOf(v) === i; });
+    rootsDirty = false;
+    return rootsCache;
   }
 
   /* inline !important beats the site writing style.opacity = 0 again */
@@ -66,7 +72,6 @@
     roots().forEach(function (p) {
       if (!p.__dkMark) {
         p.__dkMark = 1;
-        p.__dkPrev = p.style.opacity;
         forced.push(p);
       }
       p.style.setProperty('opacity', '1', 'important');
@@ -74,15 +79,18 @@
     });
   }
 
+  /* the site leaves its own inline opacity:1 behind, so restoring it means
+     waiting out its 3s timer. Fade it out ourselves instead. */
   function unforce() {
     forced.forEach(function (p) {
-      p.style.removeProperty('opacity');
-      p.style.removeProperty('visibility');
-      if (p.__dkPrev) p.style.opacity = p.__dkPrev;
+      p.style.setProperty('transition', 'opacity .12s linear', 'important');
+      p.style.setProperty('opacity', '0', 'important');
+      p.style.setProperty('visibility', 'visible', 'important');
       delete p.__dkMark;
-      delete p.__dkPrev;
     });
     forced = [];
+    rootsCache = [];
+    rootsDirty = true;
   }
 
   /* must target the video / overlay, not document, or the site's handler never sees it */
@@ -109,12 +117,17 @@
            /^(seek|progress|timeline|scrub|duration|video progress)/i.test(l.trim());
   }
 
+  var SEL = 'button,[role="button"],[role="menuitem"],[role="option"],[role="slider"],input,' +
+            '[tabindex]:not([tabindex="-1"]),div[class*="cursor-pointer"][class*="touch-none"]';
+
+  /* scoped to the overlay roots instead of the whole document */
   function collect() {
     var seen = {}, out = [];
-    q('button,[role="button"],[role="menuitem"],[role="option"],[role="slider"],input,' +
-      '[tabindex]:not([tabindex="-1"]),div[class*="cursor-pointer"][class*="touch-none"]')
-      .forEach(function (e) {
-        if (e.closest('#dktoast')) return;
+    seenEl = new Set();
+    roots().forEach(function (rt) {
+      q(SEL, rt).forEach(function (e) {
+        if (seenEl.has(e) || !e.isConnected) return;
+        if (e.closest('#dktoast') || e.closest('#dknext')) return;
         var label = (e.getAttribute('aria-label') || e.getAttribute('title') ||
                      (e.textContent || '').trim() || (isSlider(e) ? 'Duration' : ''))
                     .replace(/\s+/g, ' ').slice(0, 30);
@@ -124,10 +137,12 @@
         if (r.bottom < 0 || r.top > innerHeight) return;
         if (seen[label]) return;
         seen[label] = 1;
+        seenEl.add(e);
         if (!e.hasAttribute('tabindex')) e.tabIndex = 0;
         e.__dkTop = r.top;
         out.push(e);
       });
+    });
     return out.sort(function (a, b) {
       var ba = Math.round(a.__dkTop / 56), bb = Math.round(b.__dkTop / 56);
       if (ba !== bb) return ba - bb;
@@ -135,20 +150,31 @@
     });
   }
 
+  function ensureItems() {
+    if (!itemsDirty) return;
+    items = collect();
+    itemsDirty = false;
+  }
+
+  function clearRing(e) {
+    if (!e || !e.__dkRing) return;
+    e.style.removeProperty('outline');
+    e.style.removeProperty('outline-offset');
+    e.style.removeProperty('border-radius');
+    delete e.__dkRing;
+  }
+
+  /* only the two elements that changed are touched */
   function ring() {
-    items.forEach(function (e) {
-      if (e === items[idx]) {
-        e.style.setProperty('outline', '3px solid #fff', 'important');
-        e.style.setProperty('outline-offset', '3px', 'important');
-        e.style.setProperty('border-radius', '6px', 'important');
-        e.__dkRing = 1;
-      } else if (e.__dkRing) {
-        e.style.removeProperty('outline');
-        e.style.removeProperty('outline-offset');
-        e.style.removeProperty('border-radius');
-        delete e.__dkRing;
-      }
-    });
+    var c = items[idx];
+    if (ringed && ringed !== c) clearRing(ringed);
+    if (!c) { ringed = null; return; }
+    if (c.__dkRing) { ringed = c; return; }
+    c.style.setProperty('outline', '3px solid #fff', 'important');
+    c.style.setProperty('outline-offset', '3px', 'important');
+    c.style.setProperty('border-radius', '6px', 'important');
+    c.__dkRing = 1;
+    ringed = c;
   }
 
   function goTo(i) {
@@ -160,7 +186,8 @@
 
   function refresh() {
     force();
-    items = collect();
+    itemsDirty = true;
+    ensureItems();
     if (idx > items.length - 1) idx = items.length - 1;
     if (idx < 0) idx = 0;
     ring();
@@ -168,41 +195,188 @@
     if (c) try { c.focus({ preventScroll: true }); } catch (e) {}
   }
 
+  function tryFocusSlider(tries) {
+    if (!active) return;
+    itemsDirty = true;
+    ensureItems();
+    if (!items.length) {
+      if (tries > 0) { rootsDirty = true; poke(); force(); setTimeout(function () { tryFocusSlider(tries - 1); }, 220); }
+      else toast(video() ? 'No controls found (' + roots().length + ' overlays)' : 'No video in this frame (player inside an iframe?)');
+      return;
+    }
+    var s = items.findIndex(isSlider);
+    goTo(s >= 0 ? s : 0);
+  }
+
   function enter() {
-    if (active) { poke(); force(); return refresh(); }
     active = true;
+    rootsCache = [];
+    rootsDirty = true;
     poke();
     force();
     clearInterval(keepT);
-    keepT = setInterval(function () { poke(); force(); }, 800);
-    setTimeout(function () {
+    var tick = 0;
+    keepT = setInterval(function () {
       if (!active) return;
-      items = collect();
-      if (!items.length) toast(video() ? 'No controls found (' + roots().length + ' overlays)' : 'No video in this frame (player inside an iframe?)');
-      var s = items.findIndex(isSlider);
-      goTo(s >= 0 ? s : 0);
-    }, 120);
+      force();
+      /* the site's own hide timer keeps writing opacity 0: re-poke every 3rd tick only */
+      if (++tick % 3 === 0) { rootsDirty = true; poke(); itemsDirty = true; }
+    }, 1500);
+    if (!mo) {
+      mo = new MutationObserver(function () {
+        clearTimeout(mo.t);
+        mo.t = setTimeout(function () { rootsDirty = true; itemsDirty = true; }, 250);
+      });
+    }
+    try { mo.observe(doc.body, { childList: true, subtree: true }); } catch (e) {}
+    setTimeout(function () { tryFocusSlider(2); }, 100);
   }
 
   function leave() {
     active = false;
     clearInterval(keepT);
-    ring();
-    unforce();
-    items = [];
+    if (mo) try { mo.disconnect(); } catch (e) {}
     idx = -1;
+    ring();
+    items = [];
+    itemsDirty = true;
+    unforce();
     if (doc.activeElement && doc.activeElement.blur) doc.activeElement.blur();
   }
 
-  /* spatial navigation between the visible controls */
+  /* ---------------- up next ---------------- */
+
+  function bridgeBool(name) {
+    try { return String(window.Native[name]()) === '1'; } catch (e) { return false; }
+  }
+  function queueInfo() {
+    try { return JSON.parse(window.Native.queue() || '{}'); } catch (e) { return {}; }
+  }
+
+  function mkBtn(label, cls, fn) {
+    var b = doc.createElement('button');
+    b.className = 'b' + (cls ? ' ' + cls : '');
+    b.tabIndex = 0;
+    b.textContent = label;
+    b.onclick = fn;
+    b.onmouseenter = function () { nextIdx = nextBtns.indexOf(b); };
+    nextBtns.push(b);
+    return b;
+  }
+
+  function focusNext() {
+    var b = nextBtns[nextIdx];
+    if (b) try { b.focus({ preventScroll: true }); } catch (e) {}
+  }
+
+  function hideNext() {
+    nextOpen = false;
+    nextDismissed = true;
+    var w = doc.getElementById('dknext');
+    if (w) w.classList.remove('on');
+    var a = doc.activeElement;
+    if (a && a.closest && a.closest('#dknext') && a.blur) a.blur();
+  }
+
+  function showNext(auto) {
+    if (nextOpen) return;
+    var info = queueInfo(), canNext = bridgeBool('hasNext');
+    var v = video();
+    nextOpen = true;
+    nextDismissed = true;
+
+    var w = doc.getElementById('dknext');
+    if (!w) {
+      var st = doc.createElement('style');
+      st.textContent =
+        '#dknext{position:fixed;right:3vw;bottom:9vh;z-index:2147483002;' +
+        'background:linear-gradient(180deg,rgba(14,14,14,.97),rgba(14,14,14,.93));' +
+        'border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:18px 20px;' +
+        'width:min(32vw,400px);font:500 15px/1.35 Arial,sans-serif;color:#eee;' +
+        'box-shadow:0 18px 60px rgba(0,0,0,.72);opacity:0;transform:translateY(10px);' +
+        'transition:opacity .16s,transform .16s;pointer-events:auto}' +
+        '#dknext.on{opacity:1;transform:none}' +
+        '#dknext .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9a9a9a}' +
+        '#dknext .t{font-weight:700;font-size:18px;margin:6px 0 2px;color:#fff;' +
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+        '#dknext .s{color:#9a9a9a;font-size:13px;margin-bottom:14px;min-height:1em}' +
+        '#dknext .b{display:block;width:100%;text-align:left;padding:11px 14px;margin-top:8px;' +
+        'border-radius:9px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);' +
+        'color:#fff;font:700 15px Arial,sans-serif;cursor:pointer}' +
+        '#dknext .b.pri{background:#ff9900;border-color:#ff9900;color:#141414}' +
+        '#dknext .b:focus{outline:3px solid #fff;outline-offset:2px}';
+      doc.head.appendChild(st);
+      w = doc.createElement('div');
+      w.id = 'dknext';
+      doc.body.appendChild(w);
+    }
+
+    var label = info.season ? 'S' + info.season + 'E' + info.episode : '';
+    w.innerHTML = '<div class="k">' + (auto ? 'Up next' : 'Playback ended') + '</div>' +
+      '<div class="t">' + esc(info.title || 'Up next') + '</div>' +
+      '<div class="s">' + (label ? 'Now playing ' + esc(label) : '') + '</div>';
+
+    nextBtns = [];
+    if (canNext) w.appendChild(mkBtn('Next Episode', 'pri', function () {
+      hideNext();
+      try { window.Native.next(); } catch (e) {}
+    }));
+    w.appendChild(mkBtn('Replay', '', function () {
+      hideNext();
+      nextDismissed = false;
+      if (v) { try { v.currentTime = 0; } catch (e) {} v.play(); }
+    }));
+    w.appendChild(mkBtn('Back to Browse', '', function () {
+      hideNext();
+      try { window.Native.leavePlayer(); } catch (e) {}
+    }));
+
+    nextIdx = 0;
+    /* force a reflow so the transition runs */
+    void w.offsetWidth;
+    w.classList.add('on');
+    focusNext();
+  }
+
+  function nextKey(dir) {
+    if (dir === 'ok') { var b = nextBtns[nextIdx]; if (b) b.click(); return; }
+    if (dir === 'left' || dir === 'up') { nextIdx = Math.max(0, nextIdx - 1); return focusNext(); }
+    if (dir === 'right' || dir === 'down') { nextIdx = Math.min(nextBtns.length - 1, nextIdx + 1); return focusNext(); }
+  }
+
+  /* 'ended' and 'timeupdate' do not bubble: capture from the document */
+  doc.addEventListener('ended', function () {
+    nextDismissed = false;
+    showNext(false);
+  }, true);
+
+  doc.addEventListener('timeupdate', function () {
+    var t = Date.now();
+    if (t - tuT < 500) return;
+    tuT = t;
+    var v = video();
+    if (!v || !isFinite(v.duration) || v.duration < 120) return;
+    var left = v.duration - v.currentTime;
+    if (left > 45) nextDismissed = false;
+    if (nextOpen || nextDismissed || left > 25 || left < 0.4) return;
+    showNext(true);
+  }, true);
+
+  /* ---------------- keys ---------------- */
+
   var colX = null;
 
   function nav(dir) {
+    var t = Date.now();
+    if (t - navT < 80) return true;   /* remotes repeat fast; drop the flood */
+    navT = t;
+
     var cur = items[idx];
-    items = collect();
-    idx = Math.max(0, items.indexOf(cur));
-    cur = items[idx];
+    ensureItems();
+    if (!cur || !cur.isConnected) { idx = 0; cur = items[0]; }
+    else idx = Math.max(0, items.indexOf(cur));
     if (!cur) return false;
+
     var vertical = dir === 'up' || dir === 'down';
     var r = cur.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -210,11 +384,10 @@
     var best = -1, bestS = 1e9;
     items.forEach(function (e, i) {
       if (e === cur) return;
-      var q = e.getBoundingClientRect();
-      var qx = q.left + q.width / 2, qy = q.top + q.height / 2;
+      var b = e.getBoundingClientRect();
+      var qx = b.left + b.width / 2, qy = b.top + b.height / 2;
       var dx = qx - cx, dy = qy - cy, s;
-      /* distance from the reference x to the candidate's horizontal span */
-      var span = Math.max(q.left - cx, 0, cx - q.right);
+      var span = Math.max(b.left - cx, 0, cx - b.right);
       if (dir === 'up'    && dy < -8) s = -dy + span * 2;
       if (dir === 'down'  && dy >  8) s =  dy + span * 2;
       if (dir === 'left'  && dx < -8 && Math.abs(dy) < 40) s = -dx + Math.abs(dy) * 3;
@@ -227,6 +400,8 @@
   }
 
   window.dkPlayer = function (dir) {
+    if (nextOpen) return nextKey(dir);
+
     if (!active) {
       if (dir === 'down' || dir === 'menu') return enter();
       if (dir === 'ok') return toggle();
@@ -243,7 +418,8 @@
       if (c) {
         if (isSlider(c)) return toggle();
         c.click();
-        setTimeout(refresh, 260);
+        itemsDirty = true;
+        setTimeout(refresh, 200);
       }
       return;
     }
@@ -257,6 +433,7 @@
   };
 
   window.dkPlayerBack = function () {
+    if (nextOpen) { hideNext(); return true; }
     if (!active) return false;
     leave();
     return true;
