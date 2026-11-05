@@ -337,10 +337,11 @@ function playMedia(type, id, s, e, meta) {
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
                 profile: active || 'default', ts: Date.now() };
   try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
-  const q = { title: meta.title || '', poster: meta.poster || '',
+  const q = { type, id, title: meta.title || '', poster: meta.poster || '',
+              season: s, episode: e,
               epCount: meta.epCount || 0, nextSeason: meta.nextSeason || 0 };
-  try { Native.play(type, id, s, e, JSON.stringify(q)); }
-  catch (err) { try { Native.play(type, id, s, e); } catch (e2) {} }
+  try { Native.sessSet('queue', JSON.stringify(q)); } catch (err) {}
+  Native.play(type, id, s, e);
 }
 
 function recentCard(r) {
