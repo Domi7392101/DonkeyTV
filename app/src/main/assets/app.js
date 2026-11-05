@@ -333,10 +333,14 @@ function row(title, items) {
 }
 
 function playMedia(type, id, s, e, meta) {
+  meta = meta || {};
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
                 profile: active || 'default', ts: Date.now() };
   try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
-  Native.play(type, id, s, e);
+  const q = { title: meta.title || '', poster: meta.poster || '',
+              epCount: meta.epCount || 0, nextSeason: meta.nextSeason || 0 };
+  try { Native.play(type, id, s, e, JSON.stringify(q)); }
+  catch (err) { try { Native.play(type, id, s, e); } catch (e2) {} }
 }
 
 function recentCard(r) {
@@ -542,6 +546,7 @@ function seasons(id, list, title, poster) {
   const eps = document.createElement('div');
   eps.className = 'eps';
   eps.dataset.zone = 'eps';
+  const nums = list.filter(s => s.season_number > 0).map(s => s.season_number);
   list.filter(s => s.season_number > 0).forEach((s, i) => {
     const c = document.createElement('div');
     c.className = 'chip f'; c.tabIndex = 0; c.textContent = 'S' + s.season_number;
@@ -549,25 +554,29 @@ function seasons(id, list, title, poster) {
     c.onclick = () => {
       bar.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
-      loadEps(id, s.season_number, eps, title, poster);
+      loadEps(id, s.season_number, eps, title, poster, nums)
     };
     bar.appendChild(c);
   });
   view.appendChild(bar); view.appendChild(eps);
   const first = list.find(s => s.season_number > 0);
-  if (first) loadEps(id, first.season_number, eps, title, poster);
+  if (first) loadEps(id, s.season_number, eps, title, poster, nums);
 }
 
-function loadEps(id, season, box, title, poster) {
+function loadEps(id, season, box, title, poster, nums) {
   box.innerHTML = '';
   box.scrollLeft = 0;
-  (api('tv/' + id + '/season/' + season).episodes || []).forEach(e => {
+  const list = api('tv/' + id + '/season/' + season).episodes || [];
+  const i = (nums || []).indexOf(season);
+  const nextSeason = i >= 0 && i < nums.length - 1 ? nums[i + 1] : 0;
+  list.forEach(e => {
     const d = document.createElement('div');
     d.className = 'ep f'; d.tabIndex = 0;
     d.innerHTML = `<span class="num">S${season}E${e.episode_number}</span>
       <b>${e.name || 'Episode ' + e.episode_number}</b>
       <small>${e.air_date || ''}</small>`;
-    d.onclick = () => playMedia('tv', id, season, e.episode_number, { title, poster });
+    d.onclick = () => playMedia('tv', id, season, e.episode_number,
+      { title, poster, epCount: list.length, nextSeason });
     box.appendChild(d);
   });
 }
