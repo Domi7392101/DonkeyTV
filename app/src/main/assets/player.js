@@ -456,14 +456,14 @@
     if (nextOpen) return nextKey(dir);
 
     if (!active) {
-      if (dir === 'down' || dir === 'menu') return enter();
+      if (dir === 'down') { if (!nav('down')) window.dkNext(); return; }
       if (dir === 'ok') return toggle();
       if (dir === 'left') return seek(-15);
       if (dir === 'right') return seek(15);
       return;
     }
 
-    if (dir === 'menu') return refresh();
+    if (dir === 'menu') return window.dkNext() || enter();
     if (!items.length) { if (dir === 'up') leave(); return dir === 'ok' ? toggle() : null; }
 
     if (dir === 'ok') {
