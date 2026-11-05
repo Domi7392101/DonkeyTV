@@ -1,26 +1,40 @@
 (function () {
-  if (window.__dkVer === 8) return;
-  window.__dkVer = 8;
+  if (window.__dkVer === 9) return;
+  window.__dkVer = 9;
 
-  var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0, navT = 0, tuT = 0;
+  var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0, navT = 0;
   var forced = [], ringed = null, rootsCache = [], rootsDirty = true, itemsDirty = true, seenEl;
+  var vidEl = null, pollT = 0;
   var nextOpen = false, nextIdx = 0, nextBtns = [], nextDismissed = false, mo = null;
 
   var q = function (s, r) { return [].slice.call((r || doc).querySelectorAll(s)); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
 
-  function video() { return doc.querySelector('video'); }
+  /* same-origin iframes included; re-look-up only when the element is gone */
+  function findVideo() {
+    if (vidEl && vidEl.isConnected) return vidEl;
+    vidEl = doc.querySelector('video');
+    if (vidEl) return vidEl;
+    var fs = q('iframe');
+    for (var i = 0; i < fs.length; i++) {
+      try {
+        var x = fs[i].contentDocument && fs[i].contentDocument.querySelector('video');
+        if (x) { vidEl = x; return x; }
+      } catch (e) {}
+    }
+    return null;
+  }
 
   function seek(s) {
-    var v = video();
+    var v = findVideo();
     if (!v) return toast(s > 0 ? 'Forward' : 'Back');
     v.currentTime = Math.max(0, Math.min((v.duration || 1e9) - 1, v.currentTime + s));
     toast((s > 0 ? '+' : '') + s + 's');
   }
 
   function toggle() {
-    var v = video();
+    var v = findVideo();
     if (!v) return;
     if (v.paused) v.play(); else v.pause();
   }
@@ -95,7 +109,7 @@
 
   /* must target the video / overlay, not document, or the site's handler never sees it */
   function poke() {
-    var v = video(), t = roots()[0];
+    var v = findVideo(), t = roots()[0];
     var w = innerWidth, h = innerHeight;
     [[w * 0.5, h - 50], [w * 0.5, h - 120], [w * 0.5, h * 0.85]].forEach(function (p) {
       var o = { bubbles: true, cancelable: true, clientX: p[0], clientY: p[1] };
@@ -201,7 +215,7 @@
     ensureItems();
     if (!items.length) {
       if (tries > 0) { rootsDirty = true; poke(); force(); setTimeout(function () { tryFocusSlider(tries - 1); }, 220); }
-      else toast(video() ? 'No controls found (' + roots().length + ' overlays)' : 'No video in this frame (player inside an iframe?)');
+      else toast(findVideo() ? 'No controls found (' + roots().length + ' overlays)' : 'No video in this frame (player inside an iframe?)');
       return;
     }
     var s = items.findIndex(isSlider);
@@ -246,41 +260,17 @@
 
   /* ---------------- up next ---------------- */
 
-  var vidEl = null, canNext = true, hasNextFetched = false, pollT = 0, revealT = 0;
-
-  function bridgeBool(name) {
-    try { return String(window.Native[name]()) === '1'; } catch (e) { return false; }
-  }
+  /* the queue rides in the session map, so no extra bridge methods are needed */
   function queueInfo() {
-    try { return JSON.parse(window.Native.queue() || '{}'); } catch (e) { return {}; }
+    try { return JSON.parse(window.Native.sessGet('queue') || '{}'); } catch (e) { return {}; }
   }
 
-  /* fetch once, and if the bridge is unreachable assume there IS a next one:
-     a dead button beats no button */
-  function refreshHasNext() {
-    if (hasNextFetched) return canNext;
-    hasNextFetched = true;
-    try {
-      canNext = String(window.Native.hasNext()) === '1';
-    } catch (e) {
-      canNext = true;
-    }
-    return canNext;
-  }
-
-  /* same-origin iframes included; re-look-up only when the element is gone */
-  function findVideo() {
-    if (vidEl && vidEl.isConnected) return vidEl;
-    vidEl = doc.querySelector('video');
-    if (vidEl) return vidEl;
-    var fs = q('iframe');
-    for (var i = 0; i < fs.length; i++) {
-      try {
-        var x = fs[i].contentDocument && fs[i].contentDocument.querySelector('video');
-        if (x) { vidEl = x; return x; }
-      } catch (e) {}
-    }
-    return null;
+  function canGoNext(info) {
+    var e = parseInt(info.episode, 10), count = parseInt(info.epCount, 10) || 0;
+    var ns = parseInt(info.nextSeason, 10) || 0;
+    if (!info.id || !(e > 0)) return false;
+    if (count > 0 && e >= count) return ns > 0;
+    return true;
   }
 
   /* "the outro": last ~7% of the runtime, clamped to 30-150s */
@@ -308,7 +298,11 @@
     nextOpen = false;
     nextDismissed = true;
     var w = doc.getElementById('dknext');
-    if (w) w.classList.remove('on');
+    if (w) {
+      w.classList.remove('on');
+      w.style.setProperty('opacity', '0');
+      w.style.setProperty('pointer-events', 'none');
+    }
     var a = doc.activeElement;
     if (a && a.closest && a.closest('#dknext') && a.blur) a.blur();
   }
@@ -316,7 +310,7 @@
   function showNext(auto) {
     if (nextOpen) return;
     var info = queueInfo(), v = findVideo();
-    var ok = refreshHasNext();
+    var ok = canGoNext(info);
     nextOpen = true;
     nextDismissed = true;
 
@@ -329,8 +323,8 @@
         'border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:18px 20px;' +
         'width:min(32vw,400px);font:500 15px/1.35 Arial,sans-serif;color:#eee;' +
         'box-shadow:0 18px 60px rgba(0,0,0,.72);opacity:0;transform:translateY(10px);' +
-        'transition:opacity .16s,transform .16s;pointer-events:auto}' +
-        '#dknext.on{opacity:1;transform:none}' +
+        'transition:opacity .16s,transform .16s;pointer-events:none}' +
+        '#dknext.on{opacity:1;transform:none;pointer-events:auto}' +
         '#dknext .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9a9a9a}' +
         '#dknext .t{font-weight:700;font-size:18px;margin:6px 0 2px;color:#fff;' +
         'overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
@@ -354,7 +348,11 @@
     nextBtns = [];
     if (ok) w.appendChild(mkBtn('Play Next Episode', 'pri', function () {
       hideNext();
-      try { window.Native.next(); } catch (e) {}
+      if (!advance()) {
+        toast('No next episode');
+        nextDismissed = false;
+        setTimeout(function () { showNext(true); }, 400);
+      }
     }));
     w.appendChild(mkBtn('Replay', '', function () {
       hideNext();
@@ -367,9 +365,45 @@
     }));
 
     nextIdx = 0;
+    w.style.removeProperty('opacity');
+    w.style.removeProperty('pointer-events');
     void w.offsetWidth;
     w.classList.add('on');
     focusNext();
+  }
+
+  /* compute the next episode here and go through play(), which is always present.
+     next() is only a fallback for an older build. */
+  function advance() {
+    var info = queueInfo();
+    var e = parseInt(info.episode, 10), s = parseInt(info.season, 10) || 1;
+    var count = parseInt(info.epCount, 10) || 0;
+    var ns = parseInt(info.nextSeason, 10) || 0;
+    var nextS = s, nextE;
+
+    if (count > 0 && e >= count) {
+      if (ns <= 0) return false;
+      nextS = ns;
+      nextE = 1;
+    } else {
+      nextE = e + 1;
+    }
+    if (!info.id || !(nextE > 0)) return false;
+
+    var nq = {
+      type: 'tv', id: info.id, title: info.title || '', poster: info.poster || '',
+      season: nextS, episode: nextE,
+      epCount: nextS === s ? count : 0,
+      nextSeason: nextS === s ? ns : ns + 1
+    };
+    try { window.Native.sessSet('queue', JSON.stringify(nq)); } catch (err) {}
+
+    try {
+      window.Native.play('tv', String(info.id), String(nextS), String(nextE));
+      return true;
+    } catch (err2) {}
+    try { window.Native.next(); return true; } catch (err3) {}
+    return false;
   }
 
   function nextKey(dir) {
@@ -393,7 +427,7 @@
     pollT = setInterval(checkOutro, 250);
   }
 
-  window.addEventListener('load', function () { startPoll(); });
+  window.addEventListener('load', startPoll);
   if (doc.readyState === 'complete') startPoll();
   startPoll();
 
@@ -402,7 +436,7 @@
     showNext(false);
   }, true);
 
-  doc.addEventListener('timeupdate', function () { checkOutro(); }, true);
+  doc.addEventListener('timeupdate', checkOutro, true);
 
   /* manual reveal: DOWN near the end, or MENU at any time */
   window.dkNext = function () {
@@ -452,7 +486,7 @@
     return true;
   }
 
- window.dkPlayer = function (dir) {
+  window.dkPlayer = function (dir) {
     if (nextOpen) return nextKey(dir);
 
     /* controls closed */
@@ -498,7 +532,7 @@
     if (dir === 'up') { if (!nav('up')) leave(); return; }
     if (dir === 'down') { if (!nav('down')) window.dkNext(); return; }
   };
-  
+
   window.dkPlayerBack = function () {
     if (nextOpen) { hideNext(); return true; }
     if (!active) return false;
