@@ -452,19 +452,33 @@
     return true;
   }
 
-  window.dkPlayer = function (dir) {
+ window.dkPlayer = function (dir) {
     if (nextOpen) return nextKey(dir);
 
+    /* controls closed */
     if (!active) {
-      if (dir === 'down') { if (!nav('down')) window.dkNext(); return; }
+      if (dir === 'menu') return window.dkNext() || enter();
+      if (dir === 'down') {
+        /* only steal DOWN for the outro card; everywhere else it opens the bar */
+        var v = findVideo();
+        var nearEnd = v && isFinite(v.duration) && v.duration > 60 &&
+                      (v.duration - v.currentTime) <= outroLeft(v.duration);
+        if (nearEnd && window.dkNext()) return;
+        return enter();
+      }
       if (dir === 'ok') return toggle();
       if (dir === 'left') return seek(-15);
       if (dir === 'right') return seek(15);
       return;
     }
 
-    if (dir === 'menu') return window.dkNext() || enter();
-    if (!items.length) { if (dir === 'up') leave(); return dir === 'ok' ? toggle() : null; }
+    /* controls open */
+    if (dir === 'menu') return refresh();
+    if (!items.length) {
+      if (dir === 'up') return leave();
+      if (dir === 'down') { if (!window.dkNext()) toggle(); return; }
+      return dir === 'ok' ? toggle() : null;
+    }
 
     if (dir === 'ok') {
       var c = items[idx];
@@ -482,9 +496,9 @@
       return;
     }
     if (dir === 'up') { if (!nav('up')) leave(); return; }
-    if (dir === 'down') { nav('down'); return; }
+    if (dir === 'down') { if (!nav('down')) window.dkNext(); return; }
   };
-
+  
   window.dkPlayerBack = function () {
     if (nextOpen) { hideNext(); return true; }
     if (!active) return false;
