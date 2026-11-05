@@ -246,11 +246,46 @@
 
   /* ---------------- up next ---------------- */
 
+  var vidEl = null, canNext = true, hasNextFetched = false, pollT = 0, revealT = 0;
+
   function bridgeBool(name) {
     try { return String(window.Native[name]()) === '1'; } catch (e) { return false; }
   }
   function queueInfo() {
     try { return JSON.parse(window.Native.queue() || '{}'); } catch (e) { return {}; }
+  }
+
+  /* fetch once, and if the bridge is unreachable assume there IS a next one:
+     a dead button beats no button */
+  function refreshHasNext() {
+    if (hasNextFetched) return canNext;
+    hasNextFetched = true;
+    try {
+      canNext = String(window.Native.hasNext()) === '1';
+    } catch (e) {
+      canNext = true;
+    }
+    return canNext;
+  }
+
+  /* same-origin iframes included; re-look-up only when the element is gone */
+  function findVideo() {
+    if (vidEl && vidEl.isConnected) return vidEl;
+    vidEl = doc.querySelector('video');
+    if (vidEl) return vidEl;
+    var fs = q('iframe');
+    for (var i = 0; i < fs.length; i++) {
+      try {
+        var x = fs[i].contentDocument && fs[i].contentDocument.querySelector('video');
+        if (x) { vidEl = x; return x; }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  /* "the outro": last ~7% of the runtime, clamped to 30-150s */
+  function outroLeft(d) {
+    return Math.min(150, Math.max(30, d * 0.07));
   }
 
   function mkBtn(label, cls, fn) {
@@ -280,8 +315,8 @@
 
   function showNext(auto) {
     if (nextOpen) return;
-    var info = queueInfo(), canNext = bridgeBool('hasNext');
-    var v = video();
+    var info = queueInfo(), v = findVideo();
+    var ok = refreshHasNext();
     nextOpen = true;
     nextDismissed = true;
 
@@ -317,7 +352,7 @@
       '<div class="s">' + (label ? 'Now playing ' + esc(label) : '') + '</div>';
 
     nextBtns = [];
-    if (canNext) w.appendChild(mkBtn('Next Episode', 'pri', function () {
+    if (ok) w.appendChild(mkBtn('Play Next Episode', 'pri', function () {
       hideNext();
       try { window.Native.next(); } catch (e) {}
     }));
@@ -332,7 +367,6 @@
     }));
 
     nextIdx = 0;
-    /* force a reflow so the transition runs */
     void w.offsetWidth;
     w.classList.add('on');
     focusNext();
@@ -344,23 +378,42 @@
     if (dir === 'right' || dir === 'down') { nextIdx = Math.min(nextBtns.length - 1, nextIdx + 1); return focusNext(); }
   }
 
-  /* 'ended' and 'timeupdate' do not bubble: capture from the document */
+  /* polled: timeupdate alone is throttled to ~4Hz and some players drop it */
+  function checkOutro() {
+    var v = findVideo();
+    if (!v || nextOpen) return;
+    var d = v.duration;
+    if (!isFinite(d) || d < 60) return;
+    var left = d - v.currentTime;
+    if (left <= outroLeft(d) && left > 0.4) showNext(true);
+  }
+
+  function startPoll() {
+    clearInterval(pollT);
+    pollT = setInterval(checkOutro, 250);
+  }
+
+  window.addEventListener('load', function () { startPoll(); });
+  if (doc.readyState === 'complete') startPoll();
+  startPoll();
+
   doc.addEventListener('ended', function () {
     nextDismissed = false;
     showNext(false);
   }, true);
 
-  doc.addEventListener('timeupdate', function () {
-    var t = Date.now();
-    if (t - tuT < 500) return;
-    tuT = t;
-    var v = video();
-    if (!v || !isFinite(v.duration) || v.duration < 120) return;
+  doc.addEventListener('timeupdate', function () { checkOutro(); }, true);
+
+  /* manual reveal: DOWN near the end, or MENU at any time */
+  window.dkNext = function () {
+    var v = findVideo();
+    if (!v || !isFinite(v.duration) || v.duration < 60) return false;
     var left = v.duration - v.currentTime;
-    if (left > 45) nextDismissed = false;
-    if (nextOpen || nextDismissed || left > 25 || left < 0.4) return;
+    if (left > outroLeft(v.duration) * 2.5 && left < v.duration - 5) return false;
+    nextDismissed = false;
     showNext(true);
-  }, true);
+    return true;
+  };
 
   /* ---------------- keys ---------------- */
 
