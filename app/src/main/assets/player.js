@@ -1,6 +1,6 @@
 (function () {
-  if (window.__dkVer === 9) return;
-  window.__dkVer = 9;
+  if (window.__dkVer === 10) return;
+  window.__dkVer = 10;
 
   var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0, navT = 0;
   var forced = [], ringed = null, rootsCache = [], rootsDirty = true, itemsDirty = true, seenEl;
@@ -372,11 +372,13 @@
     focusNext();
   }
 
-  /* compute the next episode here and go through play(), which is always present.
+  /* compute the next episode here, save it to history, then play it.
      next() is only a fallback for an older build. */
   function advance() {
     var info = queueInfo();
-    var e = parseInt(info.episode, 10), s = parseInt(info.season, 10) || 1;
+    var e = parseInt(info.episode, 10), s = parseInt(info.season, 10<｜begin▁of▁sentence｜>
+
+ || 1;
     var count = parseInt(info.epCount, 10) || 0;
     var ns = parseInt(info.nextSeason, 10) || 0;
     var nextS = s, nextE;
@@ -394,9 +396,19 @@
       type: 'tv', id: info.id, title: info.title || '', poster: info.poster || '',
       season: nextS, episode: nextE,
       epCount: nextS === s ? count : 0,
-      nextSeason: nextS === s ? ns : ns + 1
+      nextSeason: nextS === s ? ns : ns + 1,
+      profile: info.profile || 'default'
     };
     try { window.Native.sessSet('queue', JSON.stringify(nq)); } catch (err) {}
+
+    /* write history before navigating, so the front page follows along */
+    try {
+      window.Native.addRecent(JSON.stringify({
+        type: 'tv', id: info.id, s: nextS, e: nextE,
+        title: info.title || '', poster: info.poster || '',
+        profile: info.profile || 'default', ts: Date.now()
+      }));
+    } catch (err) {}
 
     try {
       window.Native.play('tv', String(info.id), String(nextS), String(nextE));
