@@ -336,6 +336,9 @@ function playMedia(type, id, s, e, meta) {
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
                 profile: active || 'default', ts: Date.now() };
   try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
+  try { Native.sessSet('queue', JSON.stringify({ type, id, title: meta.title || '',
+        poster: meta.poster || '', season: s, episode: e,
+        epCount: meta.epCount || 0, nextSeason: meta.nextSeason || 0 })); } catch (err) {}
   Native.play(type, id, s, e);
 }
 
