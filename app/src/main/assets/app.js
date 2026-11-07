@@ -2,6 +2,7 @@ const IMG = 'https://image.tmdb.org/t/p/';
 const stack = [];
 let root = 'home';
 const view = document.getElementById('view');
+window.onerror = function (m, src, line) { toast('JS ' + line + ': ' + m); };
 const SEL = '.f, .btn, #nav a, input';
 let lock = 0;
 
@@ -334,14 +335,18 @@ function row(title, items) {
 
 function playMedia(type, id, s, e, meta) {
   meta = meta || {};
+  if (s == null) s = 1;
+  if (e == null) e = 1;
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
                 profile: active || 'default', ts: Date.now() };
-  try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
+  try { Native.addRecent(JSON.stringify(rec)); } catch (err) { toast('History write failed'); }
   const q = { type, id, title: meta.title || '', poster: meta.poster || '',
               season: s, episode: e,
               epCount: meta.epCount || 0, nextSeason: meta.nextSeason || 0 };
   try { Native.sessSet('queue', JSON.stringify(q)); } catch (err) {}
-  Native.play(type, id, s, e);
+  try { Native.play(type, id, s, e); return; } catch (err) {}
+  try { Native.play(type, id, s, e, JSON.stringify(q)); return; } catch (err) {}
+  toast('Could not open the player');
 }
 
 function recentCard(r) {
@@ -516,11 +521,18 @@ function search() {
   setTimeout(() => i.focus(), 60);
 }
 
+function keyMask() {
+  let k = ''; try { k = Native.getKey() || ''; } catch (e) {}
+  return k ? k.slice(0, 4) + '…' + k.slice(-4) + ' len ' + k.length : 'none';
+}
+
 function detail(param) {
   const [type, id] = param.split(':');
   const d = api(type + '/' + id);
-  if (d.error === 'http' && d.code === 401)
-    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+  if (d.error === 'http') return bootError('TMDB returned HTTP ' + d.code +
+    ' for ' + type + '/' + id + ' — key ' + keyMask());
+  if (d.error) return bootError('TMDB error "' + d.error + '" for ' + type + '/' + id +
+    ' — key ' + keyMask());
   if (!d.id) { view.innerHTML = '<div class="load">Not found.</div>'; return; }
   ambient(d.backdrop_path);
   const title = d.title || d.name;
