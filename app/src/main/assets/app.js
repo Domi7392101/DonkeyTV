@@ -5,6 +5,9 @@ const view = document.getElementById('view');
 const SEL = '.f, .btn, #nav a, input';
 let lock = 0;
 
+/* any uncaught error surfaces as a toast instead of dying silently */
+window.onerror = (m, s, l) => toast(l + ': ' + m);
+
 /* fade images in when they finish loading (load doesn't bubble -> capture) */
 document.addEventListener('load', e => {
   const t = e.target;
@@ -255,6 +258,12 @@ document.addEventListener('focusin', e => {
 function api(path) {
   try { return JSON.parse(Native.get(path)); } catch (e) { return {}; }
 }
+/* masked key, so an error message can show which key was actually used */
+function keyMask() {
+  let k = '';
+  try { k = Native.getKey() || ''; } catch (e) {}
+  return k ? k.slice(0, 4) + '…' + k.slice(-4) + ' len ' + k.length : 'none';
+}
 const poster = p => p ? IMG + 'w342' + p : '';
 const wide = p => p ? IMG + 'w1280' + p : '';
 
@@ -332,14 +341,25 @@ function row(title, items) {
   view.appendChild(s);
 }
 
+/* history + player queue are written before navigating, so a failed bridge call
+   can never lose the progress entry */
 function playMedia(type, id, s, e, meta) {
+  meta = meta || {};
+  if (s == null) s = 1;
+  if (e == null) e = 1;
   const rec = { type, id, s, e, title: meta.title || '', poster: meta.poster || '',
                 profile: active || 'default', ts: Date.now() };
-  try { Native.addRecent(JSON.stringify(rec)); } catch (err) {}
-  try { Native.sessSet('queue', JSON.stringify({ type, id, title: meta.title || '',
-        poster: meta.poster || '', season: s, episode: e,
-        epCount: meta.epCount || 0, nextSeason: meta.nextSeason || 0 })); } catch (err) {}
-  Native.play(type, id, s, e);
+  try { Native.addRecent(JSON.stringify(rec)); } catch (err) { toast('Could not save progress'); }
+  try {
+    Native.sessSet('queue', JSON.stringify({
+      type, id, title: meta.title || '', poster: meta.poster || '',
+      season: s, episode: e, epCount: meta.epCount || 0,
+      nextSeason: meta.nextSeason || 0, profile: active || 'default'
+    }));
+  } catch (err) {}
+  try { Native.play(type, id, s, e); return; } catch (err) {}
+  try { Native.play(type, id, s, e, JSON.stringify({ title: meta.title || '' })); return; } catch (err) {}
+  toast('Could not open the player');
 }
 
 function recentCard(r) {
@@ -459,8 +479,8 @@ function hero(m) {
 function home() {
   const tr = api('trending/all/day');
   if (tr.error === 'http' && tr.code === 401)
-    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
-  if (tr.error) return bootError('Network problem reaching TMDB.');
+    return bootError('Your TMDB key was rejected (401). Key in use: ' + keyMask());
+  if (tr.error) return bootError('TMDB ' + (tr.code || tr.error) + ' on trending/all/day. Key: ' + keyMask());
   const list = (tr.results || []).filter(m => m.backdrop_path);
   if (list[0]) hero(list[0]);
   const recent = recents(20);
@@ -485,8 +505,8 @@ function home() {
 function grid(kind) {
   const d = api(kind + '/popular');
   if (d.error === 'http' && d.code === 401)
-    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
-  if (d.error) return bootError('Network problem reaching TMDB.');
+    return bootError('Your TMDB key was rejected (401). Key in use: ' + keyMask());
+  if (d.error) return bootError('TMDB ' + (d.code || d.error) + ' on ' + kind + '/popular. Key: ' + keyMask());
   const g = document.createElement('div');
   g.className = 'grid';
   (d.results || []).forEach(m => g.appendChild(card(m)));
@@ -518,7 +538,8 @@ function detail(param) {
   const [type, id] = param.split(':');
   const d = api(type + '/' + id);
   if (d.error === 'http' && d.code === 401)
-    return bootError('Your TMDB key was rejected (401). Check the key in gradle.properties, or enter a new one.');
+    return bootError('Your TMDB key was rejected (401). Key in use: ' + keyMask());
+  if (d.error) return bootError('TMDB ' + (d.code || d.error) + ' on ' + type + '/' + id + '. Key: ' + keyMask());
   if (!d.id) { view.innerHTML = '<div class="load">Not found.</div>'; return; }
   ambient(d.backdrop_path);
   const title = d.title || d.name;
@@ -545,6 +566,7 @@ function seasons(id, list, title, poster) {
   const eps = document.createElement('div');
   eps.className = 'eps';
   eps.dataset.zone = 'eps';
+  const nums = list.filter(s => s.season_number > 0).map(s => s.season_number);
   list.filter(s => s.season_number > 0).forEach((s, i) => {
     const c = document.createElement('div');
     c.className = 'chip f'; c.tabIndex = 0; c.textContent = 'S' + s.season_number;
@@ -552,25 +574,29 @@ function seasons(id, list, title, poster) {
     c.onclick = () => {
       bar.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
       c.classList.add('on');
-      loadEps(id, s.season_number, eps, title, poster);
+      loadEps(id, s.season_number, eps, title, poster, nums);
     };
     bar.appendChild(c);
   });
   view.appendChild(bar); view.appendChild(eps);
   const first = list.find(s => s.season_number > 0);
-  if (first) loadEps(id, first.season_number, eps, title, poster);
+  if (first) loadEps(id, first.season_number, eps, title, poster, nums);
 }
 
-function loadEps(id, season, box, title, poster) {
+function loadEps(id, season, box, title, poster, nums) {
   box.innerHTML = '';
   box.scrollLeft = 0;
-  (api('tv/' + id + '/season/' + season).episodes || []).forEach(e => {
+  const list = api('tv/' + id + '/season/' + season).episodes || [];
+  const i = (nums || []).indexOf(season);
+  const nextSeason = i >= 0 && i < nums.length - 1 ? nums[i + 1] : 0;
+  list.forEach(e => {
     const d = document.createElement('div');
     d.className = 'ep f'; d.tabIndex = 0;
     d.innerHTML = `<span class="num">S${season}E${e.episode_number}</span>
       <b>${e.name || 'Episode ' + e.episode_number}</b>
       <small>${e.air_date || ''}</small>`;
-    d.onclick = () => playMedia('tv', id, season, e.episode_number, { title, poster });
+    d.onclick = () => playMedia('tv', id, season, e.episode_number,
+      { title, poster, epCount: list.length, nextSeason });
     box.appendChild(d);
   });
 }
