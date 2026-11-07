@@ -265,7 +265,6 @@ function keyMask() {
   return k ? k.slice(0, 4) + '…' + k.slice(-4) + ' len ' + k.length : 'none';
 }
 const poster = p => p ? IMG + 'w342' + p : '';
-const wide = p => p ? IMG + 'w1280' + p : '';
 
 function go(route, param, push = true) {
   if (push && !(route === root && param === rootParam)) stack.push([root, rootParam]);
