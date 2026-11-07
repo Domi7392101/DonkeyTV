@@ -1,6 +1,6 @@
 (function () {
-  if (window.__dkVer === 10) return;
-  window.__dkVer = 10;
+  if (window.__dkVer === 11) return;
+  window.__dkVer = 11;
 
   var doc = document, items = [], idx = -1, active = false, keepT = 0, toastT = 0, navT = 0;
   var forced = [], ringed = null, rootsCache = [], rootsDirty = true, itemsDirty = true, seenEl;
@@ -376,9 +376,8 @@
      next() is only a fallback for an older build. */
   function advance() {
     var info = queueInfo();
-    var e = parseInt(info.episode, 10), s = parseInt(info.season, 10<｜begin▁of▁sentence｜>
-
- || 1;
+    var e = parseInt(info.episode, 10);
+    var s = parseInt(info.season, 10) || 1;
     var count = parseInt(info.epCount, 10) || 0;
     var ns = parseInt(info.nextSeason, 10) || 0;
     var nextS = s, nextE;
